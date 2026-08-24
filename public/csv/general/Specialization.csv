@@ -15,7 +15,10 @@ Technician - Damage,Pulse Resistance,50
 Technician - Damage,Skill Damage,10
 Technician - Damage,Skill Tier,1
 Gunner,Pulse Resistance,50
-Gunner,Armor on Kill %,15
+Gunner,Armor on Kill %,10
 Firewall,Pulse Resistance,50
 Firewall,Health on Kill %,30
 Firewall,Burn Duration,20
+Technician - Heals,Damage to Electronics,12
+Technician - Damage,Damage to Electronics,12
+Gunner,Every 3rd Reload Speed,50

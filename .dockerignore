@@ -1,0 +1,7 @@
+.git
+node_modules
+dist
+dist-dev
+dist-staging
+raw-live-data
+*.log

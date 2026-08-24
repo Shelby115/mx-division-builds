@@ -1,0 +1,62 @@
+FROM node:14-bullseye-slim AS builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+ARG BASE_URL=/
+ARG VUE_APP_TITLE="The Division 2 Builds Tool"
+ARG VUE_APP_DB_VERSION="local-1"
+# Data sources point at the CSVs committed under public/csv, pulled from the live
+# site's cached data (the private Google Sheet these normally point to isn't
+# accessible to us). A single missing/failing source rejects the whole Promise.all
+# in dataImporter.js, which blanks the entire app, not just that section - so every
+# one of these must resolve to real content.
+ARG VUE_APP_DATA_URL_WEAPONS=/csv/weapons/Weapons.csv
+ARG VUE_APP_DATA_URL_WEAPON_ATTRIBUTES=/csv/weapons/WeaponAttributes.csv
+ARG VUE_APP_DATA_URL_WEAPON_MODS=/csv/weapons/WeaponMods.csv
+ARG VUE_APP_DATA_URL_WEAPON_TALENTS=/csv/weapons/WeaponTalents.csv
+ARG VUE_APP_DATA_URL_SPECIALIZATION=/csv/general/Specialization.csv
+ARG VUE_APP_DATA_URL_CHEST=/csv/gear/Chest.csv
+ARG VUE_APP_DATA_URL_GLOVES=/csv/gear/Gloves.csv
+ARG VUE_APP_DATA_URL_HOLSTER=/csv/gear/Holster.csv
+ARG VUE_APP_DATA_URL_KNEEPADS=/csv/gear/Kneepads.csv
+ARG VUE_APP_DATA_URL_BACKPACK=/csv/gear/Backpack.csv
+ARG VUE_APP_DATA_URL_MASK=/csv/gear/Mask.csv
+ARG VUE_APP_DATA_URL_GEAR_ATTRIBUTES=/csv/gear/Attributes.csv
+ARG VUE_APP_DATA_URL_GEAR_MODS=/csv/gear/GearMods.csv
+ARG VUE_APP_DATA_URL_GEAR_TALENTS=/csv/gear/GearTalents.csv
+ARG VUE_APP_DATA_URL_BRAND_SET_BONUSES=/csv/gear/BrandSetBonuses.csv
+ARG VUE_APP_DATA_URL_SKILLS=/csv/skills/Skills.csv
+ARG VUE_APP_DATA_URL_SKILL_STATS=/csv/skills/SkillStats.csv
+ARG VUE_APP_DATA_URL_SKILL_MODS=/csv/skills/SkillMods.csv
+ARG VUE_APP_DATA_URL_STATS_MAPPING=/csv/skills/StatsMapping.csv
+ARG VUE_APP_DATA_URL_BRANDS_DATA=/csv/skills/BrandsData.csv
+ENV BASE_URL=${BASE_URL} \
+	VUE_APP_TITLE=${VUE_APP_TITLE} \
+	VUE_APP_DB_VERSION=${VUE_APP_DB_VERSION} \
+	VUE_APP_DATA_URL_WEAPONS=${VUE_APP_DATA_URL_WEAPONS} \
+	VUE_APP_DATA_URL_WEAPON_ATTRIBUTES=${VUE_APP_DATA_URL_WEAPON_ATTRIBUTES} \
+	VUE_APP_DATA_URL_WEAPON_MODS=${VUE_APP_DATA_URL_WEAPON_MODS} \
+	VUE_APP_DATA_URL_WEAPON_TALENTS=${VUE_APP_DATA_URL_WEAPON_TALENTS} \
+	VUE_APP_DATA_URL_SPECIALIZATION=${VUE_APP_DATA_URL_SPECIALIZATION} \
+	VUE_APP_DATA_URL_CHEST=${VUE_APP_DATA_URL_CHEST} \
+	VUE_APP_DATA_URL_GLOVES=${VUE_APP_DATA_URL_GLOVES} \
+	VUE_APP_DATA_URL_HOLSTER=${VUE_APP_DATA_URL_HOLSTER} \
+	VUE_APP_DATA_URL_KNEEPADS=${VUE_APP_DATA_URL_KNEEPADS} \
+	VUE_APP_DATA_URL_BACKPACK=${VUE_APP_DATA_URL_BACKPACK} \
+	VUE_APP_DATA_URL_MASK=${VUE_APP_DATA_URL_MASK} \
+	VUE_APP_DATA_URL_GEAR_ATTRIBUTES=${VUE_APP_DATA_URL_GEAR_ATTRIBUTES} \
+	VUE_APP_DATA_URL_GEAR_MODS=${VUE_APP_DATA_URL_GEAR_MODS} \
+	VUE_APP_DATA_URL_GEAR_TALENTS=${VUE_APP_DATA_URL_GEAR_TALENTS} \
+	VUE_APP_DATA_URL_BRAND_SET_BONUSES=${VUE_APP_DATA_URL_BRAND_SET_BONUSES} \
+	VUE_APP_DATA_URL_SKILLS=${VUE_APP_DATA_URL_SKILLS} \
+	VUE_APP_DATA_URL_SKILL_STATS=${VUE_APP_DATA_URL_SKILL_STATS} \
+	VUE_APP_DATA_URL_SKILL_MODS=${VUE_APP_DATA_URL_SKILL_MODS} \
+	VUE_APP_DATA_URL_STATS_MAPPING=${VUE_APP_DATA_URL_STATS_MAPPING} \
+	VUE_APP_DATA_URL_BRANDS_DATA=${VUE_APP_DATA_URL_BRANDS_DATA}
+RUN npm run build-prod
+
+FROM nginx:alpine AS runner
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
