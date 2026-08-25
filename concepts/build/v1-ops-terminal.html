@@ -1240,6 +1240,7 @@
     searchEl.oninput = () => draw(searchEl.value);
     dialog.showModal();
     listEl.scrollTop = 0;
+    searchEl.focus();
   }
 
   function openWeaponPicker(slotKey) {
