@@ -1220,7 +1220,7 @@
       const resolved = filtered.slice(0, 150).map(resolveFn);
       listEl.innerHTML = resolved.length ? resolved.map((it, i) => '<div class="pitem' + (it.quality ? " q-" + qClass(it.quality) : "") + '" data-i="' + i + '">' + rowHtmlFn(it) + '</div>').join("") : '<div class="empty-note">No matches.</div>';
       listEl.querySelectorAll(".pitem").forEach((elm) => {
-        elm.addEventListener("click", () => { onPick(resolved[+elm.dataset.i]); dialog.close(); renderInventory(); });
+        elm.addEventListener("click", (e) => { onPick(resolved[+elm.dataset.i], e); dialog.close(); renderInventory(); });
       });
     }
     if (opts.categories) {
@@ -1258,9 +1258,19 @@
   function openGearPicker(slot) {
     let pool = DATA.gear[slot];
     if (hasExoticGearElsewhere(slot)) pool = pool.filter((g) => g.Quality !== "Exotic");
-    openPicker("Select " + slot, sortByQuality(pool, (g) => g.Quality, (g) => g["Item Name"]), Engine.resolveGear, gearRowHtml, (g) => {
+    openPicker("Select " + slot, sortByQuality(pool, (g) => g.Quality, (g) => g["Item Name"]), Engine.resolveGear, gearRowHtml, (g, e) => {
       state.gear[slot] = g;
       delete state.gearExpertise[slot];
+      // shift+click a gearset piece: fill every still-empty gear slot with that same
+      // gearset's piece too, for fast full-set equipping. Slots already holding something
+      // are left alone - this only ever fills gaps, never replaces a deliberate choice.
+      if (e && e.shiftKey && g.quality === "Gearset") {
+        GEAR_SLOTS.forEach((s2) => {
+          if (s2.key === slot || state.gear[s2.key]) return;
+          const raw = DATA.gear[s2.key].find((row) => row.Brand === g.brand && row.Quality === "Gearset");
+          if (raw) { state.gear[s2.key] = Engine.resolveGear(raw); delete state.gearExpertise[s2.key]; }
+        });
+      }
       saveGearExpertise();
     });
   }
