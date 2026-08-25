@@ -544,6 +544,13 @@
   let summaryOpen = false;
   let attachExpanded = {}; // weapon slot key -> bool, session-only UI state
 
+  // a native <select>'s change event carries no modifier-key info, so track shift ourselves
+  // to support shift+choosing a core/attribute/mod that syncs across other equipped gear.
+  let shiftHeld = false;
+  window.addEventListener("keydown", (e) => { if (e.key === "Shift") shiftHeld = true; });
+  window.addEventListener("keyup", (e) => { if (e.key === "Shift") shiftHeld = false; });
+  window.addEventListener("blur", () => { shiftHeld = false; });
+
   function img(kind, file, cls) { const src = Engine.iconSrc(kind, file); return src ? '<img class="' + (cls || "") + '" src="' + src + '" alt="">' : ""; }
   function qClass(quality) { return quality ? quality.replace(/\s+/g, "") : ""; }
   function stripHtml(html) { return html.replace(/<[^>]*>/g, " "); }
@@ -1010,6 +1017,27 @@
   function modOptionsFor(item, field) {
     return Engine.modPool();
   }
+  // shift+choosing a core/attribute/mod syncs that same slot (by position) onto every other
+  // equipped gear piece that has a matching, still-selectable slot there - a fixed slot
+  // (exotic cores, locked named-item rolls) is left alone, same as the shift+click-gearset
+  // rule. Only the one main core every piece has is in scope (coreTwo/coreThree only occur
+  // on exotics, which can't be rerolled anyway, so there's nothing to sync there).
+  function syncFieldAcrossGear(sourceSlotKey, field, kind, chosen) {
+    GEAR_SLOTS.forEach((s) => {
+      if (s.key === sourceSlotKey) return;
+      const item = state.gear[s.key];
+      const target = item && item[field];
+      if (!target || !target.selectable) return;
+      if (kind === "core") {
+        item[field] = { label: chosen.label, Max: chosen.Max, Type: chosen.Type, value: chosen.Max, selectable: true };
+        return;
+      }
+      const pool = kind === "mod" ? modOptionsFor(item, field) : attrOptionsFor(item, field);
+      const match = pool.find((p) => p.Stat === chosen.Stat);
+      if (!match) return; // e.g. would duplicate this item's other secondary attribute
+      item[field] = { Stat: match.Stat, Max: Number(match.Max), Type: match.Type, value: Number(match.Max), selectable: true };
+    });
+  }
   function rollRow(item, field, kind, gearKey) {
     const slot = item[field];
     if (!slot) return "";
@@ -1100,6 +1128,9 @@
       if (!chosen) return;
       if (kind === "core") item[field] = { label: chosen.label, Max: chosen.Max, Type: chosen.Type, value: chosen.Max, selectable: true };
       else item[field] = { Stat: chosen.Stat, Max: Number(chosen.Max), Type: chosen.Type, value: Number(chosen.Max), selectable: true };
+      // coreTwo/coreThree are excluded (see syncFieldAcrossGear comment) - only "core" itself,
+      // any attribute slot, or any mod slot can sync.
+      if (shiftHeld && field !== "coreTwo" && field !== "coreThree") syncFieldAcrossGear(gearKey, field, kind, chosen);
       renderInventory();
     }));
     el.querySelectorAll(".roll-input").forEach((inp) => inp.addEventListener("change", () => {
