@@ -687,7 +687,7 @@
       {
         key: "armor", label: "Total Armor", value: fmt(result.totals.armor), sub: "",
         detail: [
-          ["Base Armor (lvl 40)", fmt(result.totals.baseArmorLvl40)],
+          ["Base Armor (Gear, 0% Exp)", fmt(result.totals.baseArmorLvl40)],
           ["Expertise Bonus to Base", "+" + fmt(result.totals.expertiseBaseArmor - result.totals.baseArmorLvl40)],
           ["From Armor Cores", "+" + fmt(result.stats.Cores.Defensive.reduce((a, b) => a + b, 0))],
           ["Total Armor % Bonus", "+" + Math.round((result.stats.Defensive["Total Armor"] || 0) * 10) / 10 + "%"],
@@ -1086,7 +1086,7 @@
   // already show up in the roll rows and the Total Armor % strip separately)
   function gearExpertiseRowHtml(slotKey) {
     const lvl = state.gearExpertise[slotKey] != null ? state.gearExpertise[slotKey] : state.expertise;
-    const armor = Engine.gearPieceArmor(lvl);
+    const armor = Engine.gearPieceArmor(slotKey, lvl);
     return '<div class="gear-exp-row">' +
       '<span class="gear-exp-armor">+' + armor.toLocaleString() + ' Armor</span>' +
       '<span class="gear-exp-field">EXP <input type="number" class="gear-exp-input" min="0" max="30" value="' + lvl + '" data-gear-exp="' + slotKey + '"></span>' +
