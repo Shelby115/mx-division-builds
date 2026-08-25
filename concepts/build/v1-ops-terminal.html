@@ -544,12 +544,18 @@
   let summaryOpen = false;
   let attachExpanded = {}; // weapon slot key -> bool, session-only UI state
 
-  // a native <select>'s change event carries no modifier-key info, so track shift ourselves
-  // to support shift+choosing a core/attribute/mod that syncs across other equipped gear.
-  let shiftHeld = false;
-  window.addEventListener("keydown", (e) => { if (e.key === "Shift") shiftHeld = true; });
-  window.addEventListener("keyup", (e) => { if (e.key === "Shift") shiftHeld = false; });
-  window.addEventListener("blur", () => { shiftHeld = false; });
+  // a native <select>'s change event carries no modifier-key info, and by the time it fires
+  // the OS-level dropdown has already taken and released focus - a page-level keydown/keyup
+  // tracker doesn't reliably survive that round trip. Instead capture shiftKey at mousedown
+  // on the select itself, before the dropdown opens, and read it back on change.
+  function wireShiftCapture(sel) {
+    sel.addEventListener("mousedown", (e) => { sel.dataset.shiftPick = e.shiftKey ? "1" : ""; });
+  }
+  function consumeShiftPick(sel) {
+    const v = sel.dataset.shiftPick === "1";
+    sel.dataset.shiftPick = "";
+    return v;
+  }
 
   function img(kind, file, cls) { const src = Engine.iconSrc(kind, file); return src ? '<img class="' + (cls || "") + '" src="' + src + '" alt="">' : ""; }
   function qClass(quality) { return quality ? quality.replace(/\s+/g, "") : ""; }
@@ -1119,20 +1125,24 @@
       saveGearExpertise();
       renderInventory();
     }));
-    el.querySelectorAll(".roll-select").forEach((sel) => sel.addEventListener("change", (e) => {
-      const field = sel.dataset.rollField, gearKey = sel.dataset.rollSlot;
-      const item = state.gear[gearKey];
-      const kind = /core/i.test(field) ? "core" : /mod/i.test(field) ? "mod" : "attribute";
-      const pool = kind === "core" ? Engine.CORE_ATTRIBUTES : kind === "mod" ? modOptionsFor(item, field) : attrOptionsFor(item, field);
-      const chosen = pool[+sel.value];
-      if (!chosen) return;
-      if (kind === "core") item[field] = { label: chosen.label, Max: chosen.Max, Type: chosen.Type, value: chosen.Max, selectable: true };
-      else item[field] = { Stat: chosen.Stat, Max: Number(chosen.Max), Type: chosen.Type, value: Number(chosen.Max), selectable: true };
-      // coreTwo/coreThree are excluded (see syncFieldAcrossGear comment) - only "core" itself,
-      // any attribute slot, or any mod slot can sync.
-      if (shiftHeld && field !== "coreTwo" && field !== "coreThree") syncFieldAcrossGear(gearKey, field, kind, chosen);
-      renderInventory();
-    }));
+    el.querySelectorAll(".roll-select").forEach((sel) => {
+      wireShiftCapture(sel);
+      sel.addEventListener("change", () => {
+        const shiftPicked = consumeShiftPick(sel);
+        const field = sel.dataset.rollField, gearKey = sel.dataset.rollSlot;
+        const item = state.gear[gearKey];
+        const kind = /core/i.test(field) ? "core" : /mod/i.test(field) ? "mod" : "attribute";
+        const pool = kind === "core" ? Engine.CORE_ATTRIBUTES : kind === "mod" ? modOptionsFor(item, field) : attrOptionsFor(item, field);
+        const chosen = pool[+sel.value];
+        if (!chosen) return;
+        if (kind === "core") item[field] = { label: chosen.label, Max: chosen.Max, Type: chosen.Type, value: chosen.Max, selectable: true };
+        else item[field] = { Stat: chosen.Stat, Max: Number(chosen.Max), Type: chosen.Type, value: Number(chosen.Max), selectable: true };
+        // coreTwo/coreThree are excluded (see syncFieldAcrossGear comment) - only "core"
+        // itself, any attribute slot, or any mod slot can sync.
+        if (shiftPicked && field !== "coreTwo" && field !== "coreThree") syncFieldAcrossGear(gearKey, field, kind, chosen);
+        renderInventory();
+      });
+    });
     el.querySelectorAll(".roll-input").forEach((inp) => inp.addEventListener("change", () => {
       const field = inp.dataset.rollValue, gearKey = inp.dataset.rollSlot;
       const slot = state.gear[gearKey][field];
