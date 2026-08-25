@@ -1,0 +1,1253 @@
+<meta charset="utf-8">
+<title>SHD Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a09; --panel: #14140f; --panel-2: #1c1c15; --line: #33321f;
+    --text: #ece9df; --muted: #948f78; --accent: #f2711c; --accent-dim: #4a2a0d;
+    --red: #cf3f2e; --blue: #3a86c8; --yellow: #e0b62f;
+    --q-exotic: #d9432e; --q-named: #e3a73b; --q-gearset: #2fa89c; --q-highend: #e3a73b; --q-named-text: #e85dae;
+    --kw-exotic: #f2711c; --kw-named: #e85dae; --kw-highend: #e0b62f; --kw-amplify: #9dff1f;
+    --font-display: "Oswald", "Arial Narrow", sans-serif;
+    --font-body: "Barlow", "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", "Consolas", monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]):not([data-theme="light"]) {
+      --bg: #eeece3; --panel: #ffffff; --panel-2: #f5f3e9; --line: #d8d4bf;
+      --text: #201e15; --muted: #6b6752; --accent: #c05a12; --accent-dim: #f4ddc6;
+      --kw-amplify: #5a8f00;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #eeece3; --panel: #ffffff; --panel-2: #f5f3e9; --line: #d8d4bf;
+    --text: #201e15; --muted: #6b6752; --accent: #c05a12; --accent-dim: #f4ddc6;
+    --kw-amplify: #5a8f00;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font-body); }
+  ::selection { background: var(--accent); color: #0a0a09; }
+  *:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .app { max-width: 1320px; margin: 0 auto; padding-bottom: 40px; }
+
+  nav.topbar {
+    display: flex; align-items: center; justify-content: space-between; padding: 14px 24px;
+    border-bottom: 2px solid var(--accent); background: var(--panel);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand img { width: 26px; height: 26px; opacity: .9; }
+  .brand .name { font-family: var(--font-display); font-weight: 600; font-size: 19px; letter-spacing: .04em; text-transform: uppercase; }
+  .tabs { display: flex; gap: 4px; }
+  .tab {
+    font-family: var(--font-display); font-weight: 500; font-size: 14px; letter-spacing: .06em; text-transform: uppercase;
+    padding: 9px 20px; background: transparent; border: none; color: var(--muted); cursor: pointer;
+  }
+  .tab.active { background: var(--accent); color: #140b03; }
+  .tab:hover:not(.active) { color: var(--text); }
+  .topbar-actions { display: flex; gap: 8px; }
+  .btn-ghost {
+    font-family: var(--font-mono); font-size: 11.5px; padding: 7px 12px; background: transparent;
+    border: 1px solid var(--line); color: var(--muted); cursor: pointer;
+  }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  .screen { padding: 22px 24px; }
+  .screen[hidden] { display: none; }
+
+  /* ---------- INVENTORY ---------- */
+  .inv-stack { display: flex; flex-direction: column; gap: 14px; }
+
+  /* compact expandable stat summary — one toggle expands all three together */
+  .stat-summary-wrap { background: var(--panel); border: 1px solid var(--line); }
+  .stat-chips { display: grid; grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 700px) { .stat-chips { grid-template-columns: 1fr; } }
+  .stat-chip { padding: 12px 16px; cursor: pointer; border-left: 1px solid var(--line); }
+  .stat-chip:first-child { border-left: none; }
+  .stat-chip:hover { background: var(--panel-2); }
+  .stat-chip .sc-top { display: flex; justify-content: space-between; align-items: baseline; }
+  .stat-chip .sc-label { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .stat-chip .sc-caret { color: var(--muted); font-family: var(--font-mono); font-size: 11px; transition: transform .15s; }
+  .stat-summary-wrap.open .sc-caret { transform: rotate(180deg); color: var(--accent); }
+  .stat-chip .sc-value { font-family: var(--font-display); font-size: 26px; font-weight: 600; margin-top: 2px; }
+  .stat-chip .sc-sub { font-family: var(--font-mono); font-size: 11px; color: var(--accent); margin-left: 6px; }
+  .stat-details { grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); background: var(--panel-2); display: none; }
+  .stat-summary-wrap.open .stat-details { display: grid; }
+  .stat-detail-col { border-left: 1px solid var(--line); padding: 4px 0; }
+  .stat-detail-col:first-child { border-left: none; }
+  @media (max-width: 700px) { .stat-details { grid-template-columns: 1fr; } .stat-detail-col { border-left: none; border-top: 1px solid var(--line); } .stat-detail-col:first-child { border-top: none; } }
+  .stat-detail-row { display: flex; justify-content: space-between; padding: 7px 16px; font-size: 12.5px; border-bottom: 1px solid var(--line); gap: 10px; }
+  .stat-detail-row:last-child { border-bottom: none; }
+  .stat-detail-row .label { color: var(--muted); }
+  .stat-detail-row .value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+
+  /* slim exotic/named/gearset summary */
+  .quality-strip {
+    display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 6px 4px; font-family: var(--font-mono); font-size: 11px;
+  }
+  .quality-strip .qs-empty { color: var(--muted); font-style: italic; }
+  .quality-strip .qs-group { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+  .quality-strip .qs-label { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
+  .quality-strip .qs-exotic .qs-label, .quality-strip .qs-exotic .qs-item { color: var(--q-exotic); }
+  .quality-strip .qs-named .qs-label, .quality-strip .qs-named .qs-item { color: var(--q-named-text); }
+  .quality-strip .qs-gearset .qs-label, .quality-strip .qs-gearset .qs-item { color: var(--q-gearset); }
+  .quality-strip .qs-item:not(:last-child)::after { content: ", "; color: var(--muted); }
+
+  /* ---------- loadout-wide settings: expertise stepper + SHD watch toggle ---------- */
+  .loadout-settings { display: flex; flex-wrap: wrap; gap: 2px; background: var(--line); border: 1px solid var(--line); }
+  .setting-card { flex: 1 1 240px; background: var(--panel); padding: 11px 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .setting-head { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .setting-name { font-family: var(--font-display); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text); }
+  .setting-note { font-family: var(--font-body); font-size: 11px; color: var(--muted); }
+
+  .stepper { display: flex; align-items: stretch; border: 1px solid var(--line); background: var(--panel-2); flex-shrink: 0; }
+  .stepper-btn {
+    width: 28px; background: none; border: none; color: var(--muted); font-family: var(--font-mono); font-size: 16px;
+    cursor: pointer; line-height: 1; padding: 0;
+  }
+  .stepper-btn:hover { background: var(--accent-dim); color: var(--accent); }
+  .stepper-btn:active { background: var(--accent); color: #140b03; }
+  .stepper-value {
+    width: 44px; text-align: center; background: transparent; border: none; border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+    color: var(--text); font-family: var(--font-mono); font-size: 15px; font-weight: 600; -moz-appearance: textfield;
+  }
+  .stepper-value::-webkit-outer-spin-button, .stepper-value::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .stepper-value:focus { outline: none; background: var(--accent-dim); }
+  .stepper-max { display: flex; align-items: center; padding: 0 10px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+
+  .toggle { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; flex-shrink: 0; }
+  .toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .toggle-track { width: 40px; height: 22px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 11px; position: relative; transition: background .15s, border-color .15s; }
+  .toggle-thumb { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+  .toggle input:checked + .toggle-track { background: var(--accent-dim); border-color: var(--accent); }
+  .toggle input:checked + .toggle-track .toggle-thumb { transform: translateX(18px); background: var(--accent); }
+  .toggle input:focus-visible + .toggle-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .toggle-text { font-family: var(--font-mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; width: 28px; }
+  .toggle input:checked ~ .toggle-text { color: var(--accent); }
+
+  /* active talents & gear sets */
+  .effects-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 780px) { .effects-grid { grid-template-columns: 1fr; } }
+  .effect-row { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 16px; border-bottom: 1px solid var(--line); font-size: 13px; gap: 10px; }
+  .effect-row:last-child { border-bottom: none; }
+  .effect-row .e-name { font-weight: 600; }
+  .effect-row .e-slot { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); text-transform: uppercase; white-space: nowrap; }
+  .brandset-row { padding: 9px 16px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .brandset-row:last-child { border-bottom: none; }
+  .brandset-row.active { background: var(--accent-dim); }
+  .brandset-row .bs-top { display: flex; justify-content: space-between; }
+  .brandset-row .bs-name { font-weight: 600; }
+  .brandset-row .bs-count { font-family: var(--font-mono); color: var(--muted); }
+  .brandset-row.active .bs-count { color: var(--accent); }
+  .brandset-row .bs-bonus { color: var(--muted); margin-top: 2px; }
+  .brandset-row.active .bs-bonus { color: var(--text); }
+  .empty-inline { padding: 16px; color: var(--muted); font-size: 13px; text-align: center; }
+
+  /* in-depth details */
+  .depth-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 2px; background: var(--line); border: 1px solid var(--line); }
+  .depth-col { background: var(--panel); }
+  .depth-talent-row { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .depth-talent-row:last-child { border-bottom: none; }
+  .depth-talent-row .dt-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .depth-talent-row .dt-name { font-weight: 600; color: var(--accent); }
+  .depth-talent-row .dt-source { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); text-transform: uppercase; white-space: nowrap; }
+  .depth-talent-row .dt-desc { color: var(--muted); font-size: 13px; margin-top: 4px; line-height: 1.5; white-space: pre-line; }
+  .depth-talent-row.depth-set-box.is-gearset { background: var(--panel-2); border-left: 3px solid var(--q-gearset); }
+  .depth-talent-row.depth-set-box.is-gearset .dt-name { color: var(--q-gearset); }
+  .depth-talent-row.depth-set-box.is-brand { background: var(--panel-2); border-left: 3px solid var(--q-highend); }
+  .depth-talent-row.depth-set-box.is-brand .dt-name { color: var(--q-highend); }
+  .dt-boost { font-family: var(--font-mono); font-size: 10px; color: var(--accent); margin-top: 3px; }
+  .dt-subtalents { margin-top: 10px; padding-top: 6px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+  .dt-sub { padding-left: 10px; border-left: 2px solid var(--line); }
+  .dt-sub-name { font-weight: 600; font-size: 13px; }
+
+  .grid-block { background: var(--panel); border: 1px solid var(--line); margin-bottom: 14px; }
+  .grid-block-head {
+    font-family: var(--font-display); font-size: 15px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    padding: 10px 16px; border-bottom: 1px solid var(--line); color: var(--text);
+  }
+  .item-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 2px; padding: 2px; }
+  .weapon-grid { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 760px) { .weapon-grid { grid-template-columns: 1fr; } }
+  .gear-grid { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 560px) { .gear-grid { grid-template-columns: 1fr; } }
+  .item-tile {
+    background: var(--panel-2); border-left: 4px solid var(--line); padding: 12px; min-height: 92px;
+    display: flex; flex-direction: column; justify-content: flex-start; gap: 8px; position: relative;
+  }
+  .item-tile > [data-weapon-slot], .item-tile > [data-gear-slot] { cursor: pointer; }
+  .item-tile > [data-weapon-slot]:hover .tile-name, .item-tile > [data-gear-slot]:hover .tile-name { text-decoration: underline; }
+  .item-tile:hover { background: var(--accent-dim); }
+  .item-tile.core-O { border-left-color: var(--red); }
+  .item-tile.core-D { border-left-color: var(--blue); }
+  .item-tile.core-U { border-left-color: var(--yellow); }
+  .item-tile .tile-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
+  .item-tile .tile-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .item-tile .tile-icon { width: 22px; height: 22px; opacity: .85; flex-shrink: 0; }
+  .item-tile .tile-name { font-family: var(--font-body); font-weight: 600; font-size: 14px; margin-top: 6px; line-height: 1.25; }
+  .item-tile .tile-name.placeholder { color: var(--muted); font-weight: 400; font-style: italic; }
+  .item-tile .tile-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .item-tile.q-Exotic { box-shadow: inset 0 2px 0 var(--q-exotic); }
+  .item-tile.q-Named { box-shadow: inset 0 2px 0 var(--q-named); }
+  .item-tile.q-Gearset { box-shadow: inset 0 2px 0 var(--q-gearset); }
+  .item-tile.q-HighEnd { box-shadow: inset 0 2px 0 var(--q-highend); }
+  .q-Exotic .tile-name { color: var(--q-exotic); }
+  .q-Named .tile-name { color: var(--q-named-text); }
+  .pitem.q-Named .piname { color: var(--q-named-text); }
+  .q-Gearset .tile-name { color: var(--q-gearset); }
+  .q-HighEnd .tile-name { color: var(--q-highend); }
+  .qtag { font-family: var(--font-mono); font-size: 9.5px; padding: 1px 6px; border-radius: 2px; text-transform: uppercase; letter-spacing: .04em; }
+  .qtag.q-Exotic { background: var(--q-exotic); color: #1a0a06; }
+  .qtag.q-Named { background: var(--q-named); color: #1a1206; }
+  .qtag.q-HighEnd { background: var(--q-highend); color: #1a1206; }
+  .qtag.q-Gearset { background: var(--q-gearset); color: #05201d; }
+  .tile-talent { font-size: 11.5px; line-height: 1.4; }
+  .tile-talent .tt-name { font-weight: 600; color: var(--accent); }
+  .tile-talent .tt-desc { color: var(--muted); margin-top: 2px; white-space: pre-line; }
+  .tile-pick-talent {
+    align-self: flex-start; font-family: var(--font-mono); font-size: 10.5px; padding: 4px 9px;
+    background: none; border: 1px dashed var(--line); color: var(--muted); cursor: pointer;
+  }
+  .tile-pick-talent:hover { border-color: var(--accent); color: var(--accent); }
+  .tile-unequip {
+    position: absolute; top: 8px; right: 8px; z-index: 1; background: var(--panel); border: 1px solid var(--line);
+    color: var(--muted); font-family: var(--font-mono); font-size: 10px; line-height: 1; padding: 4px 6px; cursor: pointer;
+  }
+  .tile-unequip:hover { border-color: var(--red); color: var(--red); }
+
+  /* inline roll editors (core / attribute / mod value + identity overrides) */
+  .roll-rows { padding: 8px 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 5px; }
+  .roll-row { display: flex; align-items: center; gap: 6px; font-size: 11.5px; }
+  .roll-row .roll-select { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); color: var(--text); font-family: var(--font-mono); font-size: 11px; padding: 3px 4px; }
+  .roll-row .roll-label-fixed { flex: 1; min-width: 0; color: var(--muted); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .roll-row .roll-input { width: 64px; flex-shrink: 0; background: var(--panel); border: 1px solid var(--line); color: var(--text); font-family: var(--font-mono); font-size: 11px; padding: 3px 4px; text-align: right; }
+  .roll-row .roll-icon { width: 15px; height: 15px; flex-shrink: 0; opacity: .9; }
+  .roll-row .roll-icon-lg { width: 20px; height: 20px; }
+
+  /* inline keyword coloring inside talent/bonus text and quality summaries */
+  .kw-exotic { color: var(--kw-exotic); font-weight: 600; }
+  .kw-named { color: var(--kw-named); font-weight: 600; }
+  .kw-highend { color: var(--kw-highend); font-weight: 600; }
+  .kw-amplify { color: var(--kw-amplify); font-weight: 700; }
+
+  /* ---------- SHD WATCH ---------- */
+  .shd-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
+  .shd-total { font-family: var(--font-display); font-size: 16px; text-transform: uppercase; letter-spacing: .03em; }
+  .shd-actions { display: flex; gap: 8px; }
+  .shd-groups { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; background: var(--line); border: 1px solid var(--line); }
+  @media (max-width: 700px) { .shd-groups { grid-template-columns: 1fr; } }
+  .shd-group { background: var(--panel); }
+  .shd-group-head { font-family: var(--font-display); font-size: 14px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  .shd-stat-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 16px; border-bottom: 1px solid var(--line); font-size: 13px; gap: 10px; }
+  .shd-stat-row:last-child { border-bottom: none; }
+  .shd-stat-max { font-family: var(--font-mono); color: var(--muted); font-size: 11px; }
+
+  /* ---------- LIBRARY ---------- */
+  .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 2px; }
+  .lib-tile {
+    background: var(--panel); border: 1px solid var(--line); padding: 16px; cursor: pointer;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .lib-tile:hover { border-color: var(--accent); background: var(--panel-2); }
+  .lib-tile.active { border-color: var(--accent); background: var(--accent-dim); }
+  .lib-tile img { width: 34px; height: 34px; opacity: .9; flex-shrink: 0; }
+  .lib-tile .lname { font-family: var(--font-display); font-weight: 600; font-size: 16px; letter-spacing: .02em; text-transform: uppercase; }
+  .lib-tile .lcount { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .lib-section-head {
+    font-family: var(--font-display); font-size: 13px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin: 22px 0 8px;
+  }
+  .lib-browse-head { display: flex; justify-content: space-between; align-items: baseline; margin: 24px 0 10px; }
+  .lib-browse-head h3 { font-family: var(--font-display); font-size: 20px; margin: 0; text-transform: uppercase; letter-spacing: .03em; }
+
+
+  /* ---------- shared: picker dialog ---------- */
+  dialog.picker { border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 0; width: min(760px, 94vw); max-height: 80vh; }
+  dialog.picker::backdrop { background: rgba(0,0,0,.65); }
+  .picker-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .picker-head h3 { margin: 0; font-family: var(--font-display); font-size: 20px; text-transform: uppercase; letter-spacing: .03em; }
+  .picker-head button { background: none; border: 1px solid var(--line); color: var(--text); cursor: pointer; padding: 6px 10px; font-family: var(--font-mono); }
+  .picker-search { padding: 10px 18px; border-bottom: 1px solid var(--line); }
+  .picker-search input { width: 100%; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); padding: 8px 10px; font-family: var(--font-body); font-size: 14px; }
+  .picker-cats { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 18px; border-bottom: 1px solid var(--line); }
+  .picker-cat { font-family: var(--font-mono); font-size: 11px; padding: 5px 11px; border: 1px solid var(--line); color: var(--muted); cursor: pointer; background: var(--panel-2); }
+  .picker-cat:hover { color: var(--text); }
+  .picker-cat.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  .picker-list { overflow-y: auto; max-height: 52vh; }
+  .pitem {
+    padding: 11px 18px; border-bottom: 1px solid var(--line); border-left: 4px solid var(--line); cursor: pointer; display: grid;
+    grid-template-columns: 1fr auto; gap: 4px 14px; align-items: start;
+  }
+  .pitem:hover { background: var(--panel-2); }
+  .pitem.q-Exotic { border-left-color: var(--q-exotic); }
+  .pitem.q-Named { border-left-color: var(--q-named); }
+  .pitem.q-Gearset { border-left-color: var(--q-gearset); }
+  .pitem.q-HighEnd { border-left-color: var(--q-highend); }
+  .pitem .piname { font-weight: 600; font-size: 14.5px; }
+  .pitem .piquality { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
+  .pitem .piattrs { grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .pitem .piattrs .assumed { opacity: .7; }
+  .pitem .pitalent { grid-column: 1 / -1; font-size: 12.5px; }
+  .pitem .pitalent .tt-name { font-weight: 600; color: var(--accent); }
+  .pitem .pitalent .tt-desc { color: var(--muted); margin-top: 3px; line-height: 1.4; white-space: pre-line; }
+  .empty-note { padding: 30px 18px; text-align: center; color: var(--muted); font-size: 13.5px; }
+</style>
+
+<div class="app">
+  <nav class="topbar">
+    <div class="brand"><span class="name">Build Arsenal</span></div>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-screen="inventory">Inventory</button>
+      <button class="tab" data-screen="library">Library</button>
+      <button class="tab" data-screen="shd">SHD Watch</button>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn-ghost" id="clearBtn">Clear Loadout</button>
+    </div>
+  </nav>
+
+  <section class="screen" id="screen-inventory">
+    <div class="inv-stack">
+      <div class="stat-summary-wrap" id="statSummaryWrap">
+        <div class="stat-chips" id="statChips"></div>
+        <div class="stat-details" id="statDetails"></div>
+      </div>
+      <div class="quality-strip" id="qualityStrip"></div>
+      <div class="loadout-settings">
+        <div class="setting-card">
+          <div class="setting-head">
+            <span class="setting-name">Expertise Level</span>
+            <span class="setting-note">applies to every weapon &amp; gear piece</span>
+          </div>
+          <div class="stepper">
+            <button type="button" class="stepper-btn" id="expertiseDown" aria-label="Decrease expertise">−</button>
+            <input type="number" class="stepper-value" id="expertiseInput" min="0" max="30" value="30">
+            <button type="button" class="stepper-btn" id="expertiseUp" aria-label="Increase expertise">+</button>
+            <span class="stepper-max">/ 30</span>
+          </div>
+        </div>
+        <div class="setting-card">
+          <div class="setting-head">
+            <span class="setting-name">SHD Watch</span>
+            <span class="setting-note">all 16 levels on or off — fine-tune under the SHD Watch tab</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="shdToggle">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-text" id="shdToggleText">OFF</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="grid-block">
+        <div class="grid-block-head">Weapons</div>
+        <div class="item-grid weapon-grid" id="weaponGrid"></div>
+      </div>
+      <div class="grid-block">
+        <div class="grid-block-head">Gear</div>
+        <div class="item-grid gear-grid" id="gearGrid"></div>
+      </div>
+      <div class="grid-block">
+        <div class="grid-block-head">Skills &amp; Specialization</div>
+        <div class="item-grid" id="skillGrid"></div>
+      </div>
+
+      <div class="grid-block">
+        <div class="grid-block-head">In-Depth Details</div>
+        <div class="depth-tables" id="depthTables"></div>
+        <div class="grid-block-head" style="border-top:1px solid var(--line)">Talents &amp; Bonuses</div>
+        <div id="depthTalents"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="screen-library" hidden>
+    <div class="lib-section-head">Weapons</div>
+    <div class="lib-grid" id="libWeaponCats"></div>
+    <div class="lib-section-head">Armor</div>
+    <div class="lib-grid" id="libGearCats"></div>
+    <div class="lib-section-head">Brands</div>
+    <div class="lib-grid" id="libBrandCats"></div>
+    <div class="lib-section-head">Gear Sets</div>
+    <div class="lib-grid" id="libGearsetCats"></div>
+    <div class="lib-section-head">Talents</div>
+    <div class="lib-grid" id="libTalentCats"></div>
+    <div id="libBrowseWrap"></div>
+  </section>
+
+  <section class="screen" id="screen-shd" hidden>
+    <div class="shd-head">
+      <div class="shd-total" id="shdTotal"></div>
+      <div class="shd-actions">
+        <button class="btn-ghost" id="shdMaxAll">Set All to Max</button>
+        <button class="btn-ghost" id="shdZeroAll">Set All to 0</button>
+      </div>
+    </div>
+    <div class="shd-groups" id="shdGroups"></div>
+  </section>
+</div>
+
+<dialog class="picker" id="pickerDialog">
+  <div class="picker-head"><h3 id="pickerTitle">Select</h3><button id="pickerClose">Close ✕</button></div>
+  <div class="picker-search"><input id="pickerSearch" type="text" placeholder="Filter…"></div>
+  <div class="picker-cats" id="pickerCats" hidden></div>
+  <div class="picker-list" id="pickerList"></div>
+</dialog>
+
+<script>window.Engine = null;</script>
+<script>__ENGINE__</script>
+<script id="app-data" type="application/json">__DATA_V2__</script>
+<script>
+(function () {
+  const DATA = JSON.parse(document.getElementById("app-data").textContent);
+  const Engine = window.Engine.init(DATA);
+
+  const WEAPON_SLOTS = [
+    { key: "Primary", label: "Primary", filter: null, icon: "main-weapon.png" },
+    { key: "Secondary", label: "Secondary", filter: null, icon: "main-weapon.png" },
+    { key: "SideArm", label: "Sidearm", filter: "S", icon: "sidearm.png" },
+  ];
+  const GEAR_SLOTS = [
+    { key: "Mask", icon: "mask.png" }, { key: "Backpack", icon: "backpack.png" },
+    { key: "Chest", icon: "chest.png" }, { key: "Gloves", icon: "gloves.png" },
+    { key: "Holster", icon: "holster.png" }, { key: "Kneepads", icon: "kneepads.png" },
+  ];
+  const WEAPON_TYPES = ["Assault Rifle", "LMG", "Marksman Rifle", "Pistol", "Rifle", "Shotgun", "SMG"];
+
+  // Per-slot armor catalogs (Library, and the equip picker) show only Named, Exotic, and
+  // Crafted/Improvised pieces — every other High-End / Gearset piece is browsed by brand instead.
+  function isArmorCatalogItem(g) { return g.Quality === "Exotic" || g.Quality === "Named" || g.Brand === "Crafted"; }
+  function uniqueBrands(matchFn) {
+    const set = new Set();
+    GEAR_SLOTS.forEach((s) => DATA.gear[s.key].forEach((g) => { if (matchFn(g)) set.add(g.Brand); }));
+    return Array.from(set).sort();
+  }
+  const REGULAR_BRANDS = uniqueBrands((g) => (g.Quality === "High End" || g.Quality === "Named") && g.Brand !== "Crafted");
+  const GEARSET_BRANDS = uniqueBrands((g) => g.Quality === "Gearset");
+  const TALENT_CATS = [
+    ...WEAPON_TYPES.map((t) => ({ kind: "weapon", key: t, label: t })),
+    ...GEAR_SLOTS.map((s) => ({ kind: "gear", key: s.key, label: s.key })),
+  ];
+  function talentsForCat(cat) {
+    return cat.kind === "weapon" ? DATA.weaponTalents.filter((t) => t[cat.key] === "x") : DATA.gearTalents.filter((t) => t.Slot === cat.key);
+  }
+  function brandIcon(brand) {
+    for (const s of GEAR_SLOTS) {
+      const found = DATA.gear[s.key].find((g) => g.Brand === brand && g.Quality === "High End" && g.Icon) || DATA.gear[s.key].find((g) => g.Brand === brand && g.Icon);
+      if (found) return found.Icon;
+    }
+    return null;
+  }
+
+  function loadSHD() {
+    const levels = Engine.defaultSHDLevels();
+    try {
+      const saved = JSON.parse(localStorage.getItem("shd-watch-levels") || "null");
+      if (Array.isArray(saved)) levels.forEach((l, i) => { if (typeof saved[i] === "number") l.value = Math.max(0, Math.min(l.max, saved[i])); });
+    } catch (e) { /* ignore corrupt storage */ }
+    return levels;
+  }
+  function saveSHD() {
+    try { localStorage.setItem("shd-watch-levels", JSON.stringify(state.shd.map((l) => l.value))); } catch (e) { /* storage may be unavailable */ }
+  }
+
+  // one shared expertise level (0-30) stands in for every weapon and gear piece's individual
+  // expertise, for simplicity, rather than tracking it per item.
+  function loadExpertise() {
+    try {
+      const raw = localStorage.getItem("expertise-level");
+      if (raw !== null) {
+        const saved = Number(raw);
+        if (Number.isFinite(saved)) return Math.max(0, Math.min(30, saved));
+      }
+    } catch (e) { /* ignore corrupt storage */ }
+    return 30;
+  }
+  function saveExpertise() {
+    try { localStorage.setItem("expertise-level", String(state.expertise)); } catch (e) { /* storage may be unavailable */ }
+  }
+
+  const state = { weapons: {}, gear: {}, skills: {}, spec: null, shd: loadSHD(), expertise: loadExpertise() };
+  let summaryOpen = false;
+
+  function img(kind, file, cls) { const src = Engine.iconSrc(kind, file); return src ? '<img class="' + (cls || "") + '" src="' + src + '" alt="">' : ""; }
+  function qClass(quality) { return quality ? quality.replace(/\s+/g, "") : ""; }
+  function fmt(n) { return Math.round(n).toLocaleString(); }
+
+  // Exotic > Gear Set > Named > everything else (High-End), then alphabetical within each tier
+  // handles both full names (Exotic/Gearset/Named/High End) and the single-letter
+  // codes used in the talent tables (E/S/N/A).
+  const QUALITY_ORDER = { Exotic: 0, E: 0, Gearset: 1, S: 1, Named: 2, N: 2 };
+  function qualityRank(q) { return QUALITY_ORDER[qClass(q)] !== undefined ? QUALITY_ORDER[qClass(q)] : 3; }
+  function sortByQuality(list, getQuality, getName) {
+    return list.slice().sort((a, b) => {
+      const r = qualityRank(getQuality(a)) - qualityRank(getQuality(b));
+      if (r !== 0) return r;
+      return getName ? String(getName(a)).localeCompare(String(getName(b))) : 0;
+    });
+  }
+  // colors the words that matter for scanning builds at a glance: quality tiers, and the
+  // "Amplify"/"Amplifies" keyword that marks multiplicative (not additive) damage bonuses
+  function highlightKeywords(text) {
+    return text
+      .replace(/\b(Amplifies|Amplify|Amplified|Amplification)\b/g, '<span class="kw-amplify">$1</span>')
+      .replace(/\bExotic\b/g, '<span class="kw-exotic">Exotic</span>')
+      .replace(/\bNamed\b/g, '<span class="kw-named">Named</span>')
+      .replace(/\bHigh End\b/g, '<span class="kw-highend">High End</span>');
+  }
+  function compactDesc(text) { return text ? highlightKeywords(text.replace(/(\r?\n){2,}/g, "\n").trim()) : text; }
+  function talentBlock(name, desc) {
+    return '<div class="tile-talent"><div class="tt-name">' + name + '</div><div class="tt-desc">' + compactDesc(desc) + '</div></div>';
+  }
+
+  // ---- exotic exclusivity: only one exotic weapon, one exotic gear piece, at a time ----
+  function hasExoticWeaponElsewhere(excludeSlot) {
+    return Object.entries(state.weapons).some(([slot, w]) => slot !== excludeSlot && w && w.quality === "Exotic");
+  }
+  function hasExoticGearElsewhere(excludeSlot) {
+    return Object.entries(state.gear).some(([slot, g]) => slot !== excludeSlot && g && g.quality === "Exotic");
+  }
+
+  function computeCurrent() {
+    return Engine.computeLoadout({ weapons: state.weapons, gear: state.gear, specialization: state.spec ? { name: state.spec } : null, skills: state.skills, shd: state.shd, expertiseLevel: state.expertise });
+  }
+
+  // =================== INVENTORY: compact expandable stat summary ===================
+  function renderStatSummary() {
+    const result = computeCurrent();
+    const p = result.weaponStats.Primary;
+    const chips = [
+      {
+        key: "damage", label: "Weapon Damage", value: p ? fmt(p.totalDamage) : "—", sub: p ? "+" + Math.round(p.totalPct) + "%" : "",
+        detail: p ? [
+          ["Base Damage", fmt(p.baseDamage)],
+          ["Expertise Bonus", "+" + result.totals.expertiseLevel + "%"],
+          ["Total Damage", fmt(p.totalDamage)],
+          ["Headshot Damage", Math.round(p.hsd) + "%"],
+          ["Critical Hit Damage", Math.round(p.chd) + "%"],
+          ["Critical Hit Chance", Math.round(p.chc) + "%"],
+          ["RPM / Magazine", p.rpm + " / " + p.magSize],
+        ] : [["No primary weapon equipped", "—"]],
+      },
+      {
+        key: "armor", label: "Total Armor", value: fmt(result.totals.armor), sub: "",
+        detail: [
+          ["Base Armor (lvl 40)", fmt(result.totals.baseArmorLvl40)],
+          ["Expertise Bonus to Base", "+" + fmt(result.totals.expertiseBaseArmor - result.totals.baseArmorLvl40)],
+          ["From Armor Cores", "+" + fmt(result.stats.Cores.Defensive.reduce((a, b) => a + b, 0))],
+          ["Total Armor % Bonus", "+" + Math.round((result.stats.Defensive["Total Armor"] || 0) * 10) / 10 + "%"],
+          ["Total Armor", fmt(result.totals.armor)],
+          ["Health", fmt(result.totals.health)],
+          ["Armor Cores Equipped", result.stats.Cores.Defensive.length],
+        ],
+      },
+      {
+        key: "skill", label: "Skill Power", value: result.totals.skillTier, sub: "Tier", detail:
+          Object.keys(result.stats.Utility).length ? Object.entries(result.stats.Utility).map(([k, v]) => [k, (v > 0 && k !== "Skill Tier" ? "+" : "") + Math.round(v * 10) / 10 + (k === "Skill Tier" ? "" : "%")]) : [["No utility stats yet", "—"]],
+      },
+    ];
+    document.getElementById("statSummaryWrap").className = "stat-summary-wrap" + (summaryOpen ? " open" : "");
+    document.getElementById("statChips").innerHTML = chips.map((c) =>
+      '<div class="stat-chip" data-chip="' + c.key + '">' +
+      '<div class="sc-top"><span class="sc-label">' + c.label + '</span><span class="sc-caret">▾</span></div>' +
+      '<div class="sc-value">' + c.value + (c.sub ? '<span class="sc-sub">' + c.sub + '</span>' : "") + '</div></div>'
+    ).join("");
+    document.getElementById("statDetails").innerHTML = chips.map((c) =>
+      '<div class="stat-detail-col">' + c.detail.map((d) => '<div class="stat-detail-row"><span class="label">' + d[0] + '</span><span class="value">' + d[1] + '</span></div>').join("") + '</div>'
+    ).join("");
+    document.querySelectorAll("[data-chip]").forEach((el) => el.addEventListener("click", () => {
+      summaryOpen = !summaryOpen;
+      renderStatSummary();
+    }));
+  }
+
+  // =================== INVENTORY: slim exotic/named/gearset summary ===================
+  function renderQualityStrip() {
+    const exotics = [];
+    const named = [];
+    const gearsetCounts = {};
+    WEAPON_SLOTS.forEach((s) => {
+      const w = state.weapons[s.key];
+      if (!w) return;
+      if (w.quality === "Exotic") exotics.push(w.name);
+      else if (w.quality === "Named") named.push(w.name);
+      else if (w.quality === "Gearset") gearsetCounts[w.brand] = (gearsetCounts[w.brand] || 0) + 1;
+    });
+    GEAR_SLOTS.forEach((s) => {
+      const g = state.gear[s.key];
+      if (!g) return;
+      if (g.quality === "Exotic") exotics.push(g.name);
+      else if (g.quality === "Named") named.push(g.name);
+      else if (g.quality === "Gearset") gearsetCounts[g.brand] = (gearsetCounts[g.brand] || 0) + 1;
+    });
+    const gearsets = Object.entries(gearsetCounts).map(([brand, n]) => brand + " ×" + n);
+
+    const groups = [];
+    if (exotics.length) groups.push('<span class="qs-group qs-exotic"><span class="qs-label">Exotic</span>' + exotics.map((n) => '<span class="qs-item">' + n + '</span>').join("") + '</span>');
+    if (gearsets.length) groups.push('<span class="qs-group qs-gearset"><span class="qs-label">Gearset</span>' + gearsets.map((n) => '<span class="qs-item">' + n + '</span>').join("") + '</span>');
+    if (named.length) groups.push('<span class="qs-group qs-named"><span class="qs-label">Named</span>' + named.map((n) => '<span class="qs-item">' + n + '</span>').join("") + '</span>');
+
+    document.getElementById("qualityStrip").innerHTML = groups.length ? groups.join("") : '<span class="qs-empty">No exotics, named items, or gearsets equipped.</span>';
+  }
+
+  // =================== INVENTORY: in-depth details ===================
+  function renderDepthTables() {
+    const result = computeCurrent();
+    const cols = [];
+    function weaponCol(s) {
+      const w = result.weaponStats[s.key];
+      const item = state.weapons[s.key];
+      const rows = w ? [
+        ["Base Damage", fmt(w.baseDamage)], ["Total Damage", fmt(w.totalDamage)], ["Damage to Armored", fmt(w.dmgToArmored)],
+        ["Damage Out of Cover", fmt(w.dmgToOutOfCover)], ["Headshot Damage", Math.round(w.hsd) + "%"], ["Critical Hit Damage", Math.round(w.chd) + "%"],
+        ["Critical Hit Chance", Math.round(w.chc) + "%"], ["RPM", w.rpm], ["Magazine Size", w.magSize],
+      ].concat(w.weapon.core2 && w.weapon.core2.stat ? [["Core 2 (" + w.weapon.core2.stat + ")", "+" + w.weapon.core2.max]] : []) : [["No weapon equipped", "—"]];
+      return { title: s.label + (item ? " — " + item.name : ""), rows };
+    }
+    // Primary + the three stat columns lead (first row at typical widths); Secondary and
+    // Sidearm — checked far less often — trail at the end.
+    cols.push(weaponCol(WEAPON_SLOTS[0]));
+    ["Offensive", "Defensive", "Utility"].forEach((cat) => {
+      const entries = Object.entries(result.stats[cat]);
+      cols.push({ title: cat + " Stats", rows: entries.length ? entries.map(([k, v]) => [k, (v > 0 ? "+" : "") + (Math.round(v * 10) / 10) + (Number.isInteger(v) && Math.abs(v) > 1000 ? "" : "")]) : [["Nothing equipped yet", "—"]] });
+    });
+    cols.push(weaponCol(WEAPON_SLOTS[1]), weaponCol(WEAPON_SLOTS[2]));
+    document.getElementById("depthTables").innerHTML = cols.map((c) =>
+      '<div class="depth-col"><div class="grid-block-head" style="font-size:13px">' + c.title + '</div>' +
+      c.rows.map((r) => '<div class="readout-row" style="padding:7px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;font-size:12.5px"><span style="color:var(--muted)">' + r[0] + '</span><span style="font-family:var(--font-mono)">' + r[1] + '</span></div>').join("") +
+      '</div>'
+    ).join("");
+
+    // full talents & bonuses: any gear piece whose brand has an active set/brand bonus box
+    // has its own talent nested inside that box (grouped by the piece that grants it),
+    // matching how the game presents brand bonuses alongside that brand's item talents.
+    // Exotic pieces are always standalone — "Exotic" isn't a real brand grouping.
+    const progress = Engine.brandProgress({ gear: state.gear });
+    const boxedBrands = new Set(progress.filter((p) => p.active.length && p.brand !== "Exotic").map((p) => p.brand));
+    const standaloneTalents = [];
+    const talentsByBrand = {};
+    WEAPON_SLOTS.forEach((s) => {
+      const w = state.weapons[s.key];
+      if (w && w.talent) standaloneTalents.push({ name: w.talent.Name, desc: w.talent.Desc, source: s.label + " Weapon", quality: w.quality });
+    });
+    GEAR_SLOTS.forEach((s) => {
+      const g = state.gear[s.key];
+      if (g && g.talent) {
+        const entry = { name: g.talent.Talent, desc: g.talent.Desc, source: s.key, quality: g.quality };
+        if (boxedBrands.has(g.brand)) (talentsByBrand[g.brand] = talentsByBrand[g.brand] || []).push(entry);
+        else standaloneTalents.push(entry);
+      }
+    });
+    const sortedStandalone = sortByQuality(standaloneTalents, (t) => t.quality, (t) => t.name);
+    const setBoxes = progress.filter((p) => p.active.length).map((p) => ({
+      brand: p.brand, count: p.count, boosted: p.boosted, isGearset: p.isGearset,
+      bonus: p.active.join(" · "), talents: talentsByBrand[p.brand] || [],
+    })).sort((a, b) => (b.isGearset - a.isGearset) || a.brand.localeCompare(b.brand));
+
+    let html = "";
+    html += setBoxes.map((b) =>
+      '<div class="depth-talent-row depth-set-box ' + (b.isGearset ? "is-gearset" : "is-brand") + '"><div class="dt-top"><span class="dt-name">' + b.brand + ' Set Bonus</span><span class="dt-source">' + b.count + 'pc</span></div>' +
+      (b.boosted ? '<div class="dt-boost">Boosted to ' + b.count + 'pc by NinjaBike Messenger Bag</div>' : "") +
+      '<div class="dt-desc">' + compactDesc(b.bonus) + '</div>' +
+      (b.talents.length ? '<div class="dt-subtalents">' + b.talents.map((t) =>
+        '<div class="dt-sub"><div class="dt-top"><span class="dt-sub-name">' + t.name + '</span><span class="dt-source">' + t.source + '</span></div><div class="dt-desc">' + compactDesc(t.desc) + '</div></div>'
+      ).join("") + '</div>' : "") +
+      '</div>'
+    ).join("");
+    html += sortedStandalone.map((t) => '<div class="depth-talent-row"><div class="dt-top"><span class="dt-name">' + t.name + '</span><span class="dt-source">' + t.source + '</span></div><div class="dt-desc">' + compactDesc(t.desc) + '</div></div>').join("");
+    document.getElementById("depthTalents").innerHTML = html || '<div class="empty-inline">No talents or set bonuses active yet.</div>';
+  }
+
+  function renderWeaponGrid() {
+    const el = document.getElementById("weaponGrid");
+    el.innerHTML = WEAPON_SLOTS.map((s) => {
+      const item = state.weapons[s.key];
+      const q = item ? " q-" + qClass(item.quality) : "";
+      let talentHtml = "";
+      if (item) {
+        if (item.talent) talentHtml = talentBlock(item.talent.Name, item.talent.Desc);
+        else if (item.talentAssumed) talentHtml = '<button class="tile-pick-talent" data-pick-weapon-talent="' + s.key + '">Choose Talent →</button>';
+      }
+      return '<div class="item-tile' + q + '">' +
+        (item ? '<button class="tile-unequip" data-unequip-weapon="' + s.key + '" title="Unequip">✕</button>' : "") +
+        '<div data-weapon-slot="' + s.key + '"><div class="tile-top"><span class="tile-label">' + s.label + '</span>' + img("ui", s.icon, "tile-icon") + '</div>' +
+        '<div class="tile-name' + (item ? "" : " placeholder") + '">' + (item ? item.name + (item.variant !== item.name ? " (" + item.variant + ")" : "") : "Choose weapon") + '</div>' +
+        (item ? '<div class="tile-meta"><span class="qtag q-' + qClass(item.quality) + '">' + item.quality + '</span> ' + item.weaponType + '</div>' : "") + '</div>' +
+        (item ? weaponRollRowsHtml(item, s.key) : "") + talentHtml +
+        '</div>';
+    }).join("");
+    el.querySelectorAll("[data-weapon-slot]").forEach((elm) => elm.addEventListener("click", () => openWeaponPicker(elm.dataset.weaponSlot)));
+    el.querySelectorAll("[data-pick-weapon-talent]").forEach((elm) => elm.addEventListener("click", (e) => { e.stopPropagation(); openWeaponTalentPicker(elm.dataset.pickWeaponTalent); }));
+    el.querySelectorAll("[data-unequip-weapon]").forEach((elm) => elm.addEventListener("click", (e) => { e.stopPropagation(); state.weapons[elm.dataset.unequipWeapon] = null; renderInventory(); }));
+    el.querySelectorAll(".roll-select").forEach((sel) => sel.addEventListener("change", (e) => {
+      const field = sel.dataset.rollField, weaponKey = sel.dataset.rollSlot;
+      const item = state.weapons[weaponKey];
+      const pool = Engine.weaponAttributePool(null);
+      const chosen = pool[+sel.value];
+      if (!chosen) return;
+      item[field] = { Stat: chosen.Stat, Max: Number(chosen.Max), Type: chosen.Type, value: Number(chosen.Max), selectable: true };
+      renderInventory();
+    }));
+    el.querySelectorAll(".roll-input").forEach((inp) => inp.addEventListener("change", () => {
+      const field = inp.dataset.rollValue, weaponKey = inp.dataset.rollSlot;
+      const slot = state.weapons[weaponKey][field];
+      const max = slot.Max != null ? slot.Max : slot.max;
+      let v = Number(inp.value);
+      if (isNaN(v)) v = max;
+      slot.value = Math.max(0, Math.min(max, v));
+      renderInventory();
+    }));
+  }
+
+  // ---- inline roll editors for equipped weapons: Core 1 (always the weapon-type's own
+  // damage stat) and Core 2 (a fixed per-weapon-type default, e.g. SMG=Crit, LMG=DTOC) are
+  // both value-overridable but not reroll-able; Attribute 1 can be rerolled when generic. ----
+  function weaponRollRow(item, field, kind, weaponKey) {
+    const slot = item[field];
+    if (!slot) return "";
+    const iconSrc = Engine.slotTypeIcon(kind, slot.Type);
+    const iconHtml = iconSrc ? '<img class="roll-icon' + (field === "core1" ? " roll-icon-lg" : "") + '" src="' + iconSrc + '" alt="">' : "";
+    const max = slot.Max != null ? slot.Max : slot.max;
+    let bodyHtml;
+    if (field === "attribute1" && slot.selectable) {
+      const pool = Engine.weaponAttributePool(null);
+      bodyHtml = '<select class="roll-select" data-roll-field="' + field + '" data-roll-slot="' + weaponKey + '">' +
+        pool.map((o, i) => '<option value="' + i + '"' + (o.Stat === slot.Stat ? " selected" : "") + '>' + o.Stat + '</option>').join("") +
+        '</select>';
+    } else {
+      bodyHtml = '<span class="roll-label-fixed">' + (slot.stat || slot.Stat) + '</span>';
+    }
+    return '<div class="roll-row">' + iconHtml + bodyHtml +
+      '<input type="number" class="roll-input" min="0" max="' + max + '" value="' + slot.value + '" data-roll-value="' + field + '" data-roll-slot="' + weaponKey + '"></div>';
+  }
+  function weaponRollRowsHtml(item, weaponKey) {
+    const fields = [["core1", "core"], ["core2", "core"], ["attribute1", "attribute"]];
+    const rows = fields.map(([field, kind]) => weaponRollRow(item, field, kind, weaponKey)).join("");
+    return '<div class="roll-rows">' + rows + '</div>';
+  }
+
+  function coreClass(item) { return item && item.core ? " core-" + item.core.Type : ""; }
+
+  // ---- inline roll editors: core/attribute/mod identity (when choosable) + value override ----
+  function attrOptionsFor(item, field) {
+    const other = field === "attribute1" ? item.attribute2 : field === "attribute2" ? item.attribute1 : null;
+    return Engine.attributePool(other ? other.Stat : null);
+  }
+  function modOptionsFor(item, field) {
+    return Engine.modPool();
+  }
+  function rollRow(item, field, kind, gearKey) {
+    const slot = item[field];
+    if (!slot) return "";
+    const iconSrc = Engine.slotTypeIcon(kind, slot.Type);
+    const iconHtml = iconSrc ? '<img class="roll-icon' + (kind === "core" ? " roll-icon-lg" : "") + '" src="' + iconSrc + '" alt="">' : "";
+    let bodyHtml = "";
+    if (kind === "core" && slot.selectable) {
+      // Crafted/"Improvised" gear leaves its core type unrolled — the player picks it
+      bodyHtml = '<select class="roll-select" data-roll-field="' + field + '" data-roll-slot="' + gearKey + '">' +
+        Engine.CORE_ATTRIBUTES.map((o, i) => '<option value="' + i + '"' + (o.label === slot.label ? " selected" : "") + '>' + o.label + '</option>').join("") +
+        '</select>';
+    } else if (kind === "core") {
+      // fixed by the item — only 3 possible cores, so the icon + its color already say which one this is
+    } else if (slot.selectable) {
+      const pool = kind === "mod" ? modOptionsFor(item, field) : attrOptionsFor(item, field);
+      bodyHtml = '<select class="roll-select" data-roll-field="' + field + '" data-roll-slot="' + gearKey + '">' +
+        pool.map((o, i) => '<option value="' + i + '"' + (o.Stat === slot.Stat ? " selected" : "") + '>' + o.Stat + '</option>').join("") +
+        '</select>';
+    } else {
+      bodyHtml = '<span class="roll-label-fixed">' + slot.Stat + '</span>';
+    }
+    return '<div class="roll-row">' + iconHtml + bodyHtml +
+      '<input type="number" class="roll-input" min="0" max="' + slot.Max + '" value="' + slot.value + '" data-roll-value="' + field + '" data-roll-slot="' + gearKey + '"></div>';
+  }
+  function rollRowsHtml(item, gearKey) {
+    const fields = [
+      ["core", "core"], ["coreTwo", "core"], ["coreThree", "core"],
+      ["attribute1", "attribute"], ["attribute2", "attribute"], ["attribute3", "attribute"],
+      ["mod", "mod"], ["modTwo", "mod"],
+    ];
+    const rows = fields.map(([field, kind]) => rollRow(item, field, kind, gearKey)).join("");
+    return '<div class="roll-rows">' + rows + '</div>';
+  }
+
+  function renderGearGrid() {
+    const el = document.getElementById("gearGrid");
+    el.innerHTML = GEAR_SLOTS.map((s) => {
+      const item = state.gear[s.key];
+      const q = item ? " q-" + qClass(item.quality) : "";
+      let talentHtml = "";
+      if (item) {
+        if (item.talent) talentHtml = talentBlock(item.talent.Talent, item.talent.Desc);
+        else if (item.talentAssumed) talentHtml = '<button class="tile-pick-talent" data-pick-gear-talent="' + s.key + '">Choose Talent →</button>';
+      }
+      return '<div class="item-tile' + coreClass(item) + q + '">' +
+        (item ? '<button class="tile-unequip" data-unequip-gear="' + s.key + '" title="Unequip">✕</button>' : "") +
+        '<div data-gear-slot="' + s.key + '"><div class="tile-top"><span class="tile-label">' + s.key + '</span>' + img("ui", s.icon, "tile-icon") + '</div>' +
+        '<div class="tile-name' + (item ? "" : " placeholder") + '">' + (item ? item.name : "Choose " + s.key.toLowerCase()) + '</div>' +
+        (item ? '<div class="tile-meta"><span class="qtag q-' + qClass(item.quality) + '">' + item.quality + '</span> ' + item.brand + '</div>' : "") + '</div>' +
+        (item ? rollRowsHtml(item, s.key) : "") + talentHtml +
+        '</div>';
+    }).join("");
+    el.querySelectorAll("[data-gear-slot]").forEach((elm) => elm.addEventListener("click", () => openGearPicker(elm.dataset.gearSlot)));
+    el.querySelectorAll("[data-pick-gear-talent]").forEach((elm) => elm.addEventListener("click", (e) => { e.stopPropagation(); openGearTalentPicker(elm.dataset.pickGearTalent); }));
+    el.querySelectorAll("[data-unequip-gear]").forEach((elm) => elm.addEventListener("click", (e) => { e.stopPropagation(); state.gear[elm.dataset.unequipGear] = null; renderInventory(); }));
+    el.querySelectorAll(".roll-select").forEach((sel) => sel.addEventListener("change", (e) => {
+      const field = sel.dataset.rollField, gearKey = sel.dataset.rollSlot;
+      const item = state.gear[gearKey];
+      const kind = /core/i.test(field) ? "core" : /mod/i.test(field) ? "mod" : "attribute";
+      const pool = kind === "core" ? Engine.CORE_ATTRIBUTES : kind === "mod" ? modOptionsFor(item, field) : attrOptionsFor(item, field);
+      const chosen = pool[+sel.value];
+      if (!chosen) return;
+      if (kind === "core") item[field] = { label: chosen.label, Max: chosen.Max, Type: chosen.Type, value: chosen.Max, selectable: true };
+      else item[field] = { Stat: chosen.Stat, Max: Number(chosen.Max), Type: chosen.Type, value: Number(chosen.Max), selectable: true };
+      renderInventory();
+    }));
+    el.querySelectorAll(".roll-input").forEach((inp) => inp.addEventListener("change", () => {
+      const field = inp.dataset.rollValue, gearKey = inp.dataset.rollSlot;
+      const slot = state.gear[gearKey][field];
+      let v = Number(inp.value);
+      if (isNaN(v)) v = slot.Max;
+      slot.value = Math.max(0, Math.min(slot.Max, v));
+      renderInventory();
+    }));
+  }
+
+  function renderSkillGrid() {
+    const el = document.getElementById("skillGrid");
+    const specPerks = state.spec ? (DATA.specialization.find((s) => s.name === state.spec) || {}).perks || [] : [];
+    el.innerHTML =
+      '<div class="item-tile" data-spec="1"><div class="tile-top"><span class="tile-label">Specialization</span></div>' +
+      '<div class="tile-name' + (state.spec ? "" : " placeholder") + '">' + (state.spec || "Choose specialization") + '</div>' +
+      (specPerks.length ? '<div class="tile-meta">' + specPerks.slice(0, 2).map((p) => p.stat + " +" + p.val).join(", ") + '</div>' : "") + '</div>' +
+      [1, 2].map((n) => {
+        const item = state.skills[n];
+        return '<div class="item-tile" data-skill="' + n + '"><div class="tile-top"><span class="tile-label">Skill ' + n + '</span></div>' +
+          '<div class="tile-name' + (item ? "" : " placeholder") + '">' + (item ? item.name + " (" + item.variant + ")" : "Choose skill") + '</div>' + '</div>';
+      }).join("");
+    document.querySelector('[data-spec]').addEventListener("click", openSpecPicker);
+    el.querySelectorAll("[data-skill]").forEach((elm) => elm.addEventListener("click", () => openSkillPicker(elm.dataset.skill)));
+  }
+
+  function renderInventory() { renderStatSummary(); renderQualityStrip(); renderLoadoutSettings(); renderWeaponGrid(); renderGearGrid(); renderSkillGrid(); renderDepthTables(); updateUrl(); }
+
+  // =================== PICKER (shared, with real resolved attributes shown) ===================
+  const dialog = document.getElementById("pickerDialog");
+  document.getElementById("pickerClose").addEventListener("click", () => dialog.close());
+
+  function weaponRowHtml(w) {
+    const attrs = [];
+    if (w.attribute1) attrs.push('<span class="' + (w.attr1Assumed ? "assumed" : "") + '">' + w.attribute1.Stat + " +" + w.attribute1.Max + (w.attr1Assumed ? " (assumed)" : "") + '</span>');
+    attrs.push('<span>Core: ' + w.core1.stat + ' +' + w.core1.max + '%</span>');
+    if (w.core2 && w.core2.stat) attrs.push('<span>Core 2: ' + w.core2.stat + ' +' + w.core2.max + '</span>');
+    return '<span class="piname">' + w.name + (w.variant !== w.name ? " (" + w.variant + ")" : "") + '</span>' +
+      '<span class="piquality"><span class="qtag q-' + qClass(w.quality) + '">' + w.quality + '</span> ' + w.weaponType + '</span>' +
+      '<span class="piattrs">' + attrs.join("") + '</span>' +
+      (w.talent ? '<span class="pitalent">' + talentBlock(w.talent.Name, w.talent.Desc) + '</span>' : w.talentAssumed ? '<span class="pitalent assumed">Any talent — choose after equipping</span>' : "");
+  }
+  function gearRowHtml(g) {
+    const attrs = [];
+    attrs.push('<span>Core: ' + g.core.label + (g.coreAssumed ? " (assumed)" : "") + '</span>');
+    if (g.coreTwo) attrs.push('<span>Core 2: ' + g.coreTwo.label + '</span>');
+    if (g.coreThree) attrs.push('<span>Core 3: ' + g.coreThree.label + '</span>');
+    if (g.attribute1) attrs.push('<span class="' + (g.attr1Assumed ? "assumed" : "") + '">' + g.attribute1.Stat + " +" + g.attribute1.Max + (g.attr1Assumed ? " (assumed)" : "") + '</span>');
+    if (g.attribute2) attrs.push('<span class="' + (g.attr2Assumed ? "assumed" : "") + '">' + g.attribute2.Stat + " +" + g.attribute2.Max + (g.attr2Assumed ? " (assumed)" : "") + '</span>');
+    if (g.attribute3) attrs.push('<span class="' + (g.attr3Assumed ? "assumed" : "") + '">' + g.attribute3.Stat + " +" + g.attribute3.Max + (g.attr3Assumed ? " (assumed)" : "") + '</span>');
+    attrs.push('<span class="' + (g.modAssumed ? "assumed" : "") + '">' + (g.mod ? "Mod: " + g.mod.Stat + " +" + g.mod.Max + (g.modAssumed ? " (assumed)" : "") : "No Mod Slot") + '</span>');
+    if (g.modTwo) attrs.push('<span class="' + (g.modTwoAssumed ? "assumed" : "") + '">Mod 2: ' + g.modTwo.Stat + " +" + g.modTwo.Max + '</span>');
+    return '<span class="piname">' + g.name + '</span>' +
+      '<span class="piquality"><span class="qtag q-' + qClass(g.quality) + '">' + g.quality + '</span></span>' +
+      '<span class="piattrs">' + attrs.join("") + '</span>' +
+      (g.talent ? '<span class="pitalent">' + talentBlock(g.talent.Talent, g.talent.Desc) + '</span>' : g.talentAssumed ? '<span class="pitalent assumed">Any talent — choose after equipping</span>' : "");
+  }
+
+  function openPicker(title, rawItems, resolveFn, rowHtmlFn, onPick, opts) {
+    opts = opts || {};
+    document.getElementById("pickerTitle").textContent = title;
+    const listEl = document.getElementById("pickerList");
+    const searchEl = document.getElementById("pickerSearch");
+    const catsEl = document.getElementById("pickerCats");
+    searchEl.value = "";
+    let activeCat = null;
+
+    function currentItems() {
+      return activeCat ? rawItems.filter((it) => opts.categorize(it) === activeCat) : rawItems;
+    }
+    function draw(filter) {
+      const f = filter.toLowerCase();
+      const base = currentItems();
+      const filtered = f ? base.filter((it) => JSON.stringify(it).toLowerCase().includes(f)) : base;
+      const resolved = filtered.slice(0, 150).map(resolveFn);
+      listEl.innerHTML = resolved.length ? resolved.map((it, i) => '<div class="pitem' + (it.quality ? " q-" + qClass(it.quality) : "") + '" data-i="' + i + '">' + rowHtmlFn(it) + '</div>').join("") : '<div class="empty-note">No matches.</div>';
+      listEl.querySelectorAll(".pitem").forEach((elm) => {
+        elm.addEventListener("click", () => { onPick(resolved[+elm.dataset.i]); dialog.close(); renderInventory(); });
+      });
+    }
+    if (opts.categories) {
+      catsEl.hidden = false;
+      catsEl.innerHTML = '<button class="picker-cat active" data-cat="">All</button>' +
+        opts.categories.map((c) => '<button class="picker-cat" data-cat="' + c + '">' + c + '</button>').join("");
+      catsEl.querySelectorAll(".picker-cat").forEach((btn) => btn.addEventListener("click", () => {
+        activeCat = btn.dataset.cat || null;
+        catsEl.querySelectorAll(".picker-cat").forEach((b) => b.classList.toggle("active", b === btn));
+        draw(searchEl.value);
+      }));
+    } else {
+      catsEl.hidden = true;
+      catsEl.innerHTML = "";
+    }
+    draw("");
+    searchEl.oninput = () => draw(searchEl.value);
+    dialog.showModal();
+  }
+
+  function openWeaponPicker(slotKey) {
+    const cfg = WEAPON_SLOTS.find((s) => s.key === slotKey);
+    let pool = cfg.filter ? DATA.weapons.filter((w) => w.Slot === cfg.filter) : DATA.weapons;
+    if (hasExoticWeaponElsewhere(slotKey)) pool = pool.filter((w) => w.Quality !== "Exotic");
+    const items = sortByQuality(pool, (w) => w.Quality, (w) => w.Name);
+    const opts = cfg.filter ? {} : { categories: WEAPON_TYPES, categorize: (w) => w["Weapon Type"] };
+    openPicker("Select " + cfg.label, items, Engine.resolveWeapon, weaponRowHtml, (w) => { state.weapons[slotKey] = w; }, opts);
+  }
+  function openGearPicker(slot) {
+    let pool = DATA.gear[slot];
+    if (hasExoticGearElsewhere(slot)) pool = pool.filter((g) => g.Quality !== "Exotic");
+    openPicker("Select " + slot, sortByQuality(pool, (g) => g.Quality, (g) => g["Item Name"]), Engine.resolveGear, gearRowHtml, (g) => { state.gear[slot] = g; });
+  }
+  function openSkillPicker(n) {
+    openPicker("Select Skill", DATA.skills, Engine.resolveSkill,
+      (s) => '<span class="piname">' + s.name + '</span><span class="piquality">' + s.variant + '</span>' + (s.desc ? '<span class="piattrs">' + s.desc.slice(0, 90) + '…</span>' : ""),
+      (s) => { state.skills[n] = s; });
+  }
+  function openSpecPicker() {
+    openPicker("Select Specialization", DATA.specialization, (s) => s,
+      (s) => '<span class="piname">' + s.name + '</span><span class="piquality"></span><span class="piattrs">' + s.perks.map((p) => p.stat + " +" + p.val).join(", ") + '</span>',
+      (s) => { state.spec = s.name; });
+  }
+  function talentPickerRow(name, desc) {
+    return '<span class="piname">' + name + '</span><span class="piquality"></span><span class="pitalent"><span class="tt-desc">' + compactDesc(desc) + '</span></span>';
+  }
+  function openWeaponTalentPicker(slotKey) {
+    const weapon = state.weapons[slotKey];
+    const items = DATA.weaponTalents.filter((t) => t.Quality === "A" && t[weapon.weaponType] === "x");
+    openPicker("Choose Talent for " + weapon.name, items, (t) => t,
+      (t) => talentPickerRow(t.Name, t.Desc),
+      (t) => { state.weapons[slotKey].talent = t; state.weapons[slotKey].talentAssumed = false; });
+  }
+  function openGearTalentPicker(slot) {
+    const gear = state.gear[slot];
+    const items = DATA.gearTalents.filter((t) => t.Quality === "A" && t.Slot === slot);
+    openPicker("Choose Talent for " + gear.name, items, (t) => t,
+      (t) => talentPickerRow(t.Talent, t.Desc),
+      (t) => { state.gear[slot].talent = t; state.gear[slot].talentAssumed = false; });
+  }
+  document.getElementById("clearBtn").addEventListener("click", () => { state.weapons = {}; state.gear = {}; state.skills = {}; state.spec = null; renderInventory(); });
+
+  function setExpertise(v) {
+    if (isNaN(v)) v = 30;
+    state.expertise = Math.max(0, Math.min(30, v));
+    saveExpertise();
+    renderInventory();
+  }
+  document.getElementById("expertiseInput").addEventListener("change", (e) => setExpertise(Number(e.target.value)));
+  document.getElementById("expertiseDown").addEventListener("click", () => setExpertise(state.expertise - 1));
+  document.getElementById("expertiseUp").addEventListener("click", () => setExpertise(state.expertise + 1));
+
+  // SHD Watch quick toggle — flips all 16 levels to max or to 0 at once; fine-tuning
+  // individual levels still lives on the SHD Watch tab.
+  document.getElementById("shdToggle").addEventListener("change", (e) => {
+    state.shd.forEach((l) => (l.value = e.target.checked ? l.max : 0));
+    saveSHD();
+    renderInventory();
+  });
+  function renderLoadoutSettings() {
+    document.getElementById("expertiseInput").value = state.expertise;
+    const allMax = state.shd.every((l) => l.value === l.max);
+    document.getElementById("shdToggle").checked = allMax;
+    document.getElementById("shdToggleText").textContent = allMax ? "ON" : "OFF";
+  }
+
+  // =================== LIBRARY ===================
+  function libCounts(list) {
+    const byQ = {};
+    list.forEach((it) => (byQ[it.Quality] = (byQ[it.Quality] || 0) + 1));
+    return byQ;
+  }
+  function countsLine(byQ) {
+    return highlightKeywords(Object.entries(byQ).map(([q, n]) => n + " " + q).join(" · "));
+  }
+  let libSelected = null;
+  function renderLibrary() {
+    document.getElementById("libWeaponCats").innerHTML = WEAPON_TYPES.map((t) => {
+      const list = DATA.weapons.filter((w) => w["Weapon Type"] === t);
+      return '<div class="lib-tile' + (libSelected && libSelected.kind === "weapon" && libSelected.key === t ? " active" : "") + '" data-wtype="' + t + '">' +
+        img("ui", "main-weapon.png") + '<div><div class="lname">' + t + '</div><div class="lcount">' + list.length + ' catalogued · ' + countsLine(libCounts(list)) + '</div></div></div>';
+    }).join("");
+    document.getElementById("libGearCats").innerHTML = GEAR_SLOTS.map((s) => {
+      const list = DATA.gear[s.key].filter(isArmorCatalogItem);
+      return '<div class="lib-tile' + (libSelected && libSelected.kind === "gear" && libSelected.key === s.key ? " active" : "") + '" data-gtype="' + s.key + '">' +
+        img("ui", s.icon) + '<div><div class="lname">' + s.key + '</div><div class="lcount">' + list.length + ' catalogued · ' + countsLine(libCounts(list)) + '</div></div></div>';
+    }).join("");
+    document.getElementById("libBrandCats").innerHTML = REGULAR_BRANDS.map((b) => {
+      const count = GEAR_SLOTS.reduce((n, s) => n + DATA.gear[s.key].filter((g) => g.Brand === b).length, 0);
+      return '<div class="lib-tile' + (libSelected && libSelected.kind === "brand" && libSelected.key === b ? " active" : "") + '" data-brand="' + b + '">' +
+        img("brands", brandIcon(b)) + '<div><div class="lname">' + b + '</div><div class="lcount">' + count + ' pieces</div></div></div>';
+    }).join("");
+    document.getElementById("libGearsetCats").innerHTML = GEARSET_BRANDS.map((b) => {
+      const count = GEAR_SLOTS.reduce((n, s) => n + DATA.gear[s.key].filter((g) => g.Brand === b).length, 0);
+      return '<div class="lib-tile' + (libSelected && libSelected.kind === "gearset" && libSelected.key === b ? " active" : "") + '" data-gearset="' + b + '">' +
+        img("brands", brandIcon(b)) + '<div><div class="lname">' + b + '</div><div class="lcount">' + count + ' pieces</div></div></div>';
+    }).join("");
+    document.getElementById("libTalentCats").innerHTML = TALENT_CATS.map((c, i) => {
+      const count = talentsForCat(c).length;
+      const icon = c.kind === "weapon" ? "main-weapon.png" : GEAR_SLOTS.find((s) => s.key === c.key).icon;
+      return '<div class="lib-tile' + (libSelected && libSelected.kind === "talent" && libSelected.key === i ? " active" : "") + '" data-talent="' + i + '">' +
+        img("ui", icon) + '<div><div class="lname">' + c.label + '</div><div class="lcount">' + count + ' talents</div></div></div>';
+    }).join("");
+
+    document.querySelectorAll("[data-wtype]").forEach((el) => el.addEventListener("click", () => { libSelected = { kind: "weapon", key: el.dataset.wtype }; renderLibrary(); }));
+    document.querySelectorAll("[data-gtype]").forEach((el) => el.addEventListener("click", () => { libSelected = { kind: "gear", key: el.dataset.gtype }; renderLibrary(); }));
+    document.querySelectorAll("[data-brand]").forEach((el) => el.addEventListener("click", () => { libSelected = { kind: "brand", key: el.dataset.brand }; renderLibrary(); }));
+    document.querySelectorAll("[data-gearset]").forEach((el) => el.addEventListener("click", () => { libSelected = { kind: "gearset", key: el.dataset.gearset }; renderLibrary(); }));
+    document.querySelectorAll("[data-talent]").forEach((el) => el.addEventListener("click", () => { libSelected = { kind: "talent", key: +el.dataset.talent }; renderLibrary(); }));
+
+    const browseWrap = document.getElementById("libBrowseWrap");
+    if (!libSelected) { browseWrap.innerHTML = ""; return; }
+    if (libSelected.kind === "weapon" || libSelected.kind === "gear") { renderEquipBrowse(browseWrap); return; }
+    if (libSelected.kind === "brand" || libSelected.kind === "gearset") { renderBrandBrowse(browseWrap, libSelected.key); return; }
+    renderTalentBrowse(browseWrap, TALENT_CATS[libSelected.key]);
+  }
+  function renderEquipBrowse(browseWrap) {
+    let items, resolveFn, rowFn;
+    if (libSelected.kind === "weapon") {
+      let pool = DATA.weapons.filter((w) => w["Weapon Type"] === libSelected.key);
+      if (hasExoticWeaponElsewhere(null)) pool = pool.filter((w) => w.Quality !== "Exotic");
+      items = sortByQuality(pool, (w) => w.Quality, (w) => w.Name);
+      resolveFn = Engine.resolveWeapon; rowFn = weaponRowHtml;
+    } else {
+      let pool = DATA.gear[libSelected.key].filter(isArmorCatalogItem);
+      if (hasExoticGearElsewhere(libSelected.key)) pool = pool.filter((g) => g.Quality !== "Exotic");
+      items = sortByQuality(pool, (g) => g.Quality, (g) => g["Item Name"]);
+      resolveFn = Engine.resolveGear; rowFn = gearRowHtml;
+    }
+    const resolved = items.map(resolveFn);
+    browseWrap.innerHTML = '<div class="lib-browse-head"><h3>' + libSelected.key + ' Catalog</h3><span class="lcount">' + resolved.length + ' items</span></div>' +
+      '<div class="grid-block"><div class="picker-list" style="max-height:none">' +
+      resolved.map((it, i) => '<div class="pitem' + (it.quality ? " q-" + qClass(it.quality) : "") + '" data-i="' + i + '">' + rowFn(it) + '</div>').join("") + '</div></div>';
+    browseWrap.querySelectorAll(".pitem").forEach((elm) => {
+      elm.addEventListener("click", () => {
+        const it = resolved[+elm.dataset.i];
+        if (libSelected.kind === "weapon") {
+          const target = it.slot === "S" ? "SideArm" : (state.weapons.Primary ? "Secondary" : "Primary");
+          state.weapons[target] = it;
+        } else {
+          state.gear[libSelected.key] = it;
+        }
+        renderInventory();
+        switchScreen("inventory");
+      });
+    });
+  }
+  function renderBrandBrowse(browseWrap, brand) {
+    const tiers = [];
+    for (let t = 0; t < 6; t++) {
+      const found = DATA.brandSetBonuses.find((b) => b.Brand === brand + t);
+      if (!found) continue;
+      if (found.stat === "Talent") {
+        const gt = DATA.gearTalents.find((x) => x.Talent === found.Talent);
+        tiers.push({ n: t + 1, text: found.Talent, desc: gt ? gt.Desc : "" });
+      } else {
+        tiers.push({ n: t + 1, text: found.stat + " +" + found.val + (found.stat1 ? ", " + found.stat1 + " +" + found.val1 : ""), desc: "" });
+      }
+    }
+    const pieces = [];
+    GEAR_SLOTS.forEach((s) => DATA.gear[s.key].filter((g) => g.Brand === brand).forEach((g) => pieces.push({ slot: s.key, item: Engine.resolveGear(g) })));
+    browseWrap.innerHTML = '<div class="lib-browse-head"><h3>' + brand + '</h3><span class="lcount">' + pieces.length + ' pieces</span></div>' +
+      '<div class="grid-block"><div class="grid-block-head" style="font-size:13px">Set Bonus</div>' +
+      (tiers.length ? tiers.map((t) => '<div class="brandset-row"><div class="bs-top"><span class="bs-name">' + t.n + 'pc</span></div><div class="bs-bonus">' + compactDesc(t.text) + (t.desc ? '<div style="margin-top:4px">' + compactDesc(t.desc) + '</div>' : "") + '</div></div>').join("") : '<div class="empty-inline">No set bonus data.</div>') +
+      '</div>' +
+      '<div class="grid-block"><div class="grid-block-head" style="font-size:13px">Pieces</div><div class="picker-list" style="max-height:none">' +
+      pieces.map((p, i) => '<div class="pitem' + (p.item.quality ? " q-" + qClass(p.item.quality) : "") + '" data-i="' + i + '"><span class="piquality">' + p.slot + '</span>' + gearRowHtml(p.item) + '</div>').join("") +
+      '</div></div>';
+    browseWrap.querySelectorAll(".pitem").forEach((elm) => {
+      elm.addEventListener("click", () => {
+        const p = pieces[+elm.dataset.i];
+        state.gear[p.slot] = p.item;
+        renderInventory();
+        switchScreen("inventory");
+      });
+    });
+  }
+  function renderTalentBrowse(browseWrap, cat) {
+    const sorted = sortByQuality(talentsForCat(cat), (t) => t.Quality, (t) => cat.kind === "weapon" ? t.Name : t.Talent);
+    browseWrap.innerHTML = '<div class="lib-browse-head"><h3>' + cat.label + ' Talents</h3><span class="lcount">' + sorted.length + ' talents</span></div>' +
+      '<div class="grid-block"><div class="picker-list" style="max-height:none">' +
+      sorted.map((t) => {
+        const name = cat.kind === "weapon" ? t.Name : t.Talent;
+        const on = cat.kind === "weapon" ? DATA.weapons.filter((w) => w.Talent === name).map((w) => w.Name) : (DATA.gear[cat.key] || []).filter((g) => g.Talent === name).map((g) => g["Item Name"]);
+        const source = on.length ? "Rolls on: " + on.slice(0, 6).join(", ") + (on.length > 6 ? " +" + (on.length - 6) + " more" : "") : "Recalibration only";
+        return '<div class="pitem q-' + qClass(t.Quality === "E" ? "Exotic" : t.Quality === "N" ? "Named" : t.Quality === "S" ? "Gearset" : "High End") + '">' +
+          '<span class="piname">' + name + '</span><span class="piquality">' + t.Quality + '</span>' +
+          '<span class="pitalent"><span class="tt-desc">' + compactDesc(t.Desc) + '</span></span>' +
+          '<span class="piattrs">' + source + '</span></div>';
+      }).join("") + '</div></div>';
+  }
+
+  // =================== SHD WATCH ===================
+  function renderSHD() {
+    const groups = ["Offense", "Handling", "Defense", "Utility"];
+    const total = state.shd.reduce((a, l) => a + l.value, 0);
+    const maxTotal = state.shd.reduce((a, l) => a + l.max, 0);
+    document.getElementById("shdTotal").textContent = "SHD Watch — " + total + " / " + maxTotal + " points allocated";
+    document.getElementById("shdGroups").innerHTML = groups.map((grp) =>
+      '<div class="shd-group"><div class="shd-group-head">' + grp + '</div>' +
+      state.shd.map((l, i) => l.group === grp ? { l, i } : null).filter(Boolean).map(({ l, i }) =>
+        '<div class="shd-stat-row"><span class="shd-stat-name">' + l.name + '</span>' +
+        '<input type="number" class="roll-input" min="0" max="' + l.max + '" value="' + l.value + '" data-shd-i="' + i + '">' +
+        '<span class="shd-stat-max">/ ' + l.max + '</span></div>'
+      ).join("") + '</div>'
+    ).join("");
+    document.querySelectorAll("[data-shd-i]").forEach((inp) => inp.addEventListener("change", () => {
+      const i = +inp.dataset.shdI;
+      let v = Number(inp.value);
+      if (isNaN(v)) v = 0;
+      state.shd[i].value = Math.max(0, Math.min(state.shd[i].max, v));
+      saveSHD();
+      renderInventory();
+      renderSHD();
+    }));
+    document.getElementById("shdMaxAll").onclick = () => { state.shd.forEach((l) => (l.value = l.max)); saveSHD(); renderInventory(); renderSHD(); };
+    document.getElementById("shdZeroAll").onclick = () => { state.shd.forEach((l) => (l.value = 0)); saveSHD(); renderInventory(); renderSHD(); };
+  }
+
+  // =================== nav ===================
+  function switchScreen(name) {
+    document.querySelectorAll(".screen").forEach((s) => (s.hidden = s.id !== "screen-" + name));
+    document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.screen === name));
+    if (name === "library") renderLibrary();
+    if (name === "shd") renderSHD();
+  }
+  document.getElementById("tabs").addEventListener("click", (e) => { if (e.target.dataset.screen) switchScreen(e.target.dataset.screen); });
+
+  // =================== URL persistence: loadout survives reload / is shareable ===================
+  // captures any deviation (identity choice and/or rolled value) from a fresh resolve of the same raw row
+  function slotDiff(cur, base) {
+    if (!cur) return null;
+    const d = {};
+    const curId = cur.Stat || cur.label, baseId = base && (base.Stat || base.label);
+    if (curId !== baseId) d.s = curId;
+    const max = cur.Max != null ? cur.Max : cur.max;
+    if (cur.value !== max) d.v = cur.value;
+    return Object.keys(d).length ? d : null;
+  }
+  function refWeapon(w) {
+    if (!w) return null;
+    const base = Engine.resolveWeapon(w.raw);
+    const ref = { i: w.raw.index };
+    if (w.talent && !w.talentAssumed) ref.t = w.talent.Name;
+    const core1 = slotDiff(w.core1, base.core1); if (core1) ref.core1 = core1;
+    const core2 = slotDiff(w.core2, base.core2); if (core2) ref.core2 = core2;
+    const attribute1 = slotDiff(w.attribute1, base.attribute1); if (attribute1) ref.attribute1 = attribute1;
+    return ref;
+  }
+  function refGear(g) {
+    if (!g) return null;
+    const base = Engine.resolveGear(g.raw);
+    const ref = { i: g.raw.index };
+    if (g.talent && !g.talentAssumed) ref.t = g.talent.Talent;
+    ["core", "coreTwo", "coreThree", "attribute1", "attribute2", "attribute3", "mod", "modTwo"].forEach((f) => {
+      const d = slotDiff(g[f], base[f]);
+      if (d) ref[f] = d;
+    });
+    return ref;
+  }
+  function serializeState() {
+    const out = { w: {}, g: {}, sk: {} };
+    WEAPON_SLOTS.forEach((s) => { const r = refWeapon(state.weapons[s.key]); if (r) out.w[s.key] = r; });
+    GEAR_SLOTS.forEach((s) => { const r = refGear(state.gear[s.key]); if (r) out.g[s.key] = r; });
+    [1, 2].forEach((n) => { if (state.skills[n]) out.sk[n] = state.skills[n].raw.index; });
+    if (state.spec) out.sp = state.spec;
+    const shdNonzero = state.shd.map((l, i) => (l.value ? [i, l.value] : null)).filter(Boolean);
+    if (shdNonzero.length) out.shd = shdNonzero;
+    if (state.expertise !== 30) out.exp = state.expertise;
+    return out;
+  }
+  function updateUrl() {
+    try {
+      const data = serializeState();
+      const hasAny = Object.keys(data.w).length || Object.keys(data.g).length || Object.keys(data.sk).length || data.sp || (data.shd && data.shd.length) || data.exp != null;
+      const hash = hasAny ? "#b=" + encodeURIComponent(JSON.stringify(data)) : "";
+      history.replaceState(null, "", location.pathname + location.search + hash);
+    } catch (e) { /* URL persistence is a convenience, never block the app on it */ }
+  }
+  function applySlotRef(resolved, field, d, kind) {
+    if (!d || !resolved[field]) return;
+    if (d.s && kind !== "weaponCore") {
+      let found = null;
+      if (kind === "core") found = Engine.CORE_ATTRIBUTES.find((c) => c.label === d.s);
+      else if (kind === "mod") found = DATA.gearMods.find((m) => m.Stat === d.s && m.Quality === "A");
+      else if (kind === "weaponAttribute") found = DATA.weaponAttributes.find((a) => a.Stat === d.s && a.Quality === "A") || DATA.weaponAttributes.find((a) => a.Stat === d.s);
+      else found = DATA.gearAttributes.find((a) => a.Stat === d.s && a.Quality === "A") || DATA.gearAttributes.find((a) => a.Stat === d.s);
+      if (found) {
+        if (kind === "core") resolved[field] = { label: found.label, Max: found.Max, Type: found.Type, value: found.Max, selectable: true };
+        else resolved[field] = { Stat: found.Stat, Max: Number(found.Max), Type: found.Type, value: Number(found.Max), selectable: true };
+      }
+    }
+    if (d.v != null) resolved[field].value = d.v;
+  }
+  function restoreFromUrl() {
+    const m = location.hash.match(/^#b=(.+)$/);
+    if (!m) return;
+    let data;
+    try { data = JSON.parse(decodeURIComponent(m[1])); } catch (e) { return; }
+    WEAPON_SLOTS.forEach((s) => {
+      const ref = data.w && data.w[s.key];
+      if (!ref) return;
+      const raw = DATA.weapons.find((w) => w.index === ref.i);
+      if (!raw) return;
+      const resolved = Engine.resolveWeapon(raw);
+      if (ref.t) {
+        const t = DATA.weaponTalents.find((x) => x.Name === ref.t);
+        if (t) { resolved.talent = t; resolved.talentAssumed = false; }
+      }
+      applySlotRef(resolved, "core1", ref.core1, "weaponCore");
+      applySlotRef(resolved, "core2", ref.core2, "weaponCore");
+      applySlotRef(resolved, "attribute1", ref.attribute1, "weaponAttribute");
+      state.weapons[s.key] = resolved;
+    });
+    GEAR_SLOTS.forEach((s) => {
+      const ref = data.g && data.g[s.key];
+      if (!ref) return;
+      const raw = DATA.gear[s.key].find((g) => g.index === ref.i);
+      if (!raw) return;
+      const resolved = Engine.resolveGear(raw);
+      if (ref.t) {
+        const t = DATA.gearTalents.find((x) => x.Slot === s.key && x.Talent === ref.t);
+        if (t) { resolved.talent = t; resolved.talentAssumed = false; }
+      }
+      applySlotRef(resolved, "core", ref.core, "core");
+      applySlotRef(resolved, "coreTwo", ref.coreTwo, "core");
+      applySlotRef(resolved, "coreThree", ref.coreThree, "core");
+      applySlotRef(resolved, "attribute1", ref.attribute1, "attribute");
+      applySlotRef(resolved, "attribute2", ref.attribute2, "attribute");
+      applySlotRef(resolved, "attribute3", ref.attribute3, "attribute");
+      applySlotRef(resolved, "mod", ref.mod, "mod");
+      applySlotRef(resolved, "modTwo", ref.modTwo, "mod");
+      state.gear[s.key] = resolved;
+    });
+    if (data.sk) {
+      Object.entries(data.sk).forEach(([n, idx]) => {
+        const raw = DATA.skills.find((sk) => sk.index === idx);
+        if (raw) state.skills[n] = Engine.resolveSkill(raw);
+      });
+    }
+    if (data.sp) state.spec = data.sp;
+    if (data.shd) data.shd.forEach(([i, v]) => { if (state.shd[i]) state.shd[i].value = Math.max(0, Math.min(state.shd[i].max, v)); });
+    if (data.exp != null) state.expertise = Math.max(0, Math.min(30, Number(data.exp)));
+  }
+
+  restoreFromUrl();
+  renderInventory();
+})();
+</script>
