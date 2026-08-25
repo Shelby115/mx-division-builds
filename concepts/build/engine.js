@@ -222,18 +222,28 @@ window.Engine = (function () {
 		// ---- aggregate a full loadout into totals, faithfully following statsService.js ----
 		function computeLoadout(loadout) {
 			// loadout: { weapons: {Primary, Secondary, SideArm}, gear: {Chest,...}, specialization: {name} | null, skills: {Skill1, Skill2}, shd: [{name,type,max,value}] }
-			const stats = { Offensive: {}, Defensive: {}, Utility: {}, Cores: { Offensive: [], Defensive: [], Utility: [] }, brands: {} };
-			const add = (bag, key, val) => { bag[key] = (bag[key] || 0) + Number(val || 0); };
+			const stats = { Offensive: {}, Defensive: {}, Utility: {}, Cores: { Offensive: [], Defensive: [], Utility: [] }, brands: {}, Sources: {} };
+			// every additive stat contribution optionally records where it came from (a plain
+			// label), so a tooltip can later explain a total instead of just showing the number -
+			// currently only surfaced for Critical Hit Chance, but works for any stat.
+			const add = (bag, key, val, source) => {
+				bag[key] = (bag[key] || 0) + Number(val || 0);
+				if (source && val) {
+					stats.Sources[key] = stats.Sources[key] || [];
+					stats.Sources[key].push({ source, amount: Number(val) });
+				}
+			};
 			// gear slots use "Max", weapon core slots use lowercase "max" - accept either.
 			const rollOf = (slot) => (slot.value != null ? slot.value : slot.Max != null ? slot.Max : slot.max);
 
 			const gearList = Object.values(loadout.gear || {}).filter(Boolean);
-			gearList.forEach((g) => {
+			Object.entries(loadout.gear || {}).forEach(([slotKey, g]) => {
+				if (!g) return;
 				stats.brands[g.brand] = stats.brands[g.brand] || [];
 				stats.brands[g.brand].push(g.quality === "Exotic" ? (g.talent ? g.talent.Desc : "Exotic") : null);
 				[g.core, g.coreTwo, g.coreThree].forEach((c) => { if (c) stats.Cores[STAT_TYPE_LABEL[c.Type]].push(rollOf(c)); });
-				[g.attribute1, g.attribute2, g.attribute3, g.mod, g.modTwo].forEach((stat) => {
-					if (stat) add(stats[STAT_TYPE_LABEL[stat.Type]], stat.Stat, rollOf(stat));
+				[["attribute1", g.attribute1], ["attribute2", g.attribute2], ["attribute3", g.attribute3], ["mod", g.mod], ["modTwo", g.modTwo]].forEach(([field, stat]) => {
+					if (stat) add(stats[STAT_TYPE_LABEL[stat.Type]], stat.Stat, rollOf(stat), slotKey + " (" + g.name + ")" + (/mod/i.test(field) ? " Mod" : ""));
 				});
 			});
 
@@ -253,7 +263,7 @@ window.Engine = (function () {
 						} else if (found.stat) {
 							buffs.push(found.stat + " +" + found.val);
 							const t = statsMappingByStat[found.stat];
-							if (t) add(stats[STAT_TYPE_LABEL[t.Type]], found.stat, found.val);
+							if (t) add(stats[STAT_TYPE_LABEL[t.Type]], found.stat, found.val, brand + " (" + (tier + 1) + "pc)");
 							// Skill Tier isn't a plain additive stat — it's derived from how many
 							// "cores" contribute to it, same as gear cores, so a brand/gearset tier
 							// that grants it must push a core too or the total silently stays at 0.
@@ -261,7 +271,7 @@ window.Engine = (function () {
 							if (found.stat1 && statsMappingByStat[found.stat1]) {
 								buffs.push(found.stat1 + " +" + found.val1);
 								const t1 = statsMappingByStat[found.stat1];
-								add(stats[STAT_TYPE_LABEL[t1.Type]], found.stat1, found.val1);
+								add(stats[STAT_TYPE_LABEL[t1.Type]], found.stat1, found.val1, brand + " (" + (tier + 1) + "pc)");
 								if (found.stat1 === "Skill Tier") stats.Cores.Utility.push(1);
 							}
 						}
@@ -277,30 +287,34 @@ window.Engine = (function () {
 			stats.Utility["Skill Tier"] = stats.Cores.Utility.length;
 
 			// SHD Watch levels — flat additive bonuses, same shape as brand/gear stats.
-			(loadout.shd || []).forEach((lvl) => { if (lvl.value) add(stats[STAT_TYPE_LABEL[lvl.type]], lvl.name, lvl.value); });
+			(loadout.shd || []).forEach((lvl) => { if (lvl.value) add(stats[STAT_TYPE_LABEL[lvl.type]], lvl.name, lvl.value, "SHD Watch"); });
 
 			if (loadout.specialization) {
 				["Assault Rifle Damage", "LMG Damage", "Marksman Rifle Damage", "Pistol Damage", "Rifle Damage", "Shotgun Damage", "SMG Damage"]
-					.forEach((dmg) => add(stats.Offensive, dmg, 15));
+					.forEach((dmg) => add(stats.Offensive, dmg, 15, "Specialization: " + loadout.specialization.name));
 				const spec = DATA.specialization.find((s) => s.name === loadout.specialization.name);
 				if (spec) {
 					spec.perks.forEach((p) => {
 						const t = statsMappingByStat[p.stat];
-						if (t) add(stats[STAT_TYPE_LABEL[t.Type]], p.stat, p.val);
+						if (t) add(stats[STAT_TYPE_LABEL[t.Type]], p.stat, p.val, "Specialization: " + spec.name);
 					});
 				}
 			}
 
-			// one shared expertise level (0-30) stands in for every weapon's individual expertise,
-			// for simplicity - it adds straight into weapon damage %, same weight as a core roll.
+			// shared expertise level (0-30) is the default for every weapon's own expertise -
+			// each weapon slot can override it (loadout.weaponExpertise, keyed by slot), same
+			// pattern as gear's per-piece expertise. It adds straight into weapon damage %, same
+			// weight as a core roll.
 			const expertiseLevel = Number(loadout.expertiseLevel || 0);
+			const weaponExpertiseMap = loadout.weaponExpertise || {};
 
 			// weapon damage per slot
-			function weaponStatsFor(weapon) {
+			function weaponStatsFor(weapon, slotKey) {
 				if (!weapon) return null;
+				const thisExpertise = weaponExpertiseMap[slotKey] != null ? Number(weaponExpertiseMap[slotKey]) : expertiseLevel;
 				const AWD = stats.Cores.Offensive.reduce((a, b) => a + b, 0);
 				const core1Contribution = stats.Offensive[weapon.core1.stat] || 0;
-				const weaponSpecificDamage = expertiseLevel + core1Contribution + rollOf(weapon.core1);
+				const weaponSpecificDamage = thisExpertise + core1Contribution + rollOf(weapon.core1);
 				const genericWeaponDamage = stats.Offensive["Weapon Damage"] || 0;
 				const totalPct = AWD + weaponSpecificDamage + genericWeaponDamage;
 				const totalDamage = Math.round(weapon.baseDamage * (1 + totalPct / 100));
@@ -311,6 +325,7 @@ window.Engine = (function () {
 					if (weapon.attribute1 && weapon.attribute1.Stat === statName) v += rollOf(weapon.attribute1);
 					return v;
 				}
+				const modSlotLabels = { optic: "Optic Mod", underBarrel: "Under Barrel Mod", magazine: "Magazine Mod", muzzle: "Muzzle Mod" };
 				const modSlots = [weapon.mods.optic, weapon.mods.underBarrel, weapon.mods.magazine, weapon.mods.muzzle];
 				function fromGunMods(statName) {
 					let v = 0;
@@ -321,9 +336,25 @@ window.Engine = (function () {
 					});
 					return v;
 				}
+				// same total as fromGunMods+fromGunAndGear, but also itemizes every contribution
+				// (gear/brand/SHD/spec, via stats.Sources, plus this weapon's own core2/attribute1
+				// and mods) - for stats where the player might want to know exactly what's adding up
+				function explainStat(statName) {
+					const sources = (stats.Sources[statName] || []).map((s) => ({ source: s.source, amount: s.amount }));
+					Object.entries(weapon.mods).forEach(([slotKey, m]) => {
+						if (!m) return;
+						if (m.pos === statName) sources.push({ source: modSlotLabels[slotKey], amount: m.valPos });
+						if (m.neg === statName) sources.push({ source: modSlotLabels[slotKey], amount: m.valNeg });
+					});
+					if (weapon.core2 && weapon.core2.stat === statName) sources.push({ source: "Weapon Core 2", amount: rollOf(weapon.core2) });
+					if (weapon.attribute1 && weapon.attribute1.Stat === statName) sources.push({ source: "Weapon Attribute", amount: rollOf(weapon.attribute1) });
+					const total = sources.reduce((sum, s) => sum + s.amount, 0);
+					return { total, sources };
+				}
 				const hsd = weapon.hsd + fromGunMods("Headshot Damage") + fromGunAndGear("Headshot Damage");
 				const chd = 25 + fromGunMods("Critical Hit Damage") + fromGunAndGear("Critical Hit Damage");
-				const chc = fromGunMods("Critical Hit Chance") + fromGunAndGear("Critical Hit Chance");
+				const chcExplain = explainStat("Critical Hit Chance");
+				const chc = chcExplain.total;
 				const dta = fromGunAndGear("Damage to Armor");
 				const dtooc = fromGunAndGear("Damage to TOC");
 
@@ -339,8 +370,8 @@ window.Engine = (function () {
 				const reloadSpeedMs = weapon.reloadSpeedMs / (1 + reloadSpeedPct / 100);
 
 				return {
-					weapon, baseDamage: weapon.baseDamage, totalPct, totalDamage,
-					hsd, chd, chc,
+					weapon, baseDamage: weapon.baseDamage, totalPct, totalDamage, expertiseLevel: thisExpertise,
+					hsd, chd, chc, chcSources: chcExplain.sources,
 					dmgToArmored: Math.round(totalDamage * (1 + dta / 100)),
 					dmgToOutOfCover: Math.round(totalDamage * (1 + dtooc / 100)),
 					rpm: weapon.rpm, magSize: weapon.magSize, totalMagSize, reloadSpeedMs, reloadSpeedPct,
@@ -349,9 +380,9 @@ window.Engine = (function () {
 			}
 
 			const weaponStats = {
-				Primary: weaponStatsFor(loadout.weapons && loadout.weapons.Primary),
-				Secondary: weaponStatsFor(loadout.weapons && loadout.weapons.Secondary),
-				SideArm: weaponStatsFor(loadout.weapons && loadout.weapons.SideArm),
+				Primary: weaponStatsFor(loadout.weapons && loadout.weapons.Primary, "Primary"),
+				Secondary: weaponStatsFor(loadout.weapons && loadout.weapons.Secondary, "Secondary"),
+				SideArm: weaponStatsFor(loadout.weapons && loadout.weapons.SideArm, "SideArm"),
 			};
 
 			// Each equipped piece contributes its own real base armor (GEAR_SLOT_BASE_ARMOR),

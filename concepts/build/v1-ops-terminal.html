@@ -523,12 +523,12 @@
   function saveExpertise() {
     try { localStorage.setItem("expertise-level", String(state.expertise)); } catch (e) { /* storage may be unavailable */ }
   }
-  // per-piece expertise overrides (slot -> level). A slot with no entry here just uses the
-  // shared expertise level above. Stepping the shared level (up/down arrows or typing into
-  // that box) wipes every override - see setExpertise().
-  function loadGearExpertise() {
+  // per-piece expertise overrides (slot -> level), for gear and weapons alike. A slot with
+  // no entry here just uses the shared expertise level above. Stepping the shared level
+  // (up/down arrows or typing into that box) wipes every override - see setExpertise().
+  function loadExpertiseOverrides(storageKey) {
     try {
-      const raw = localStorage.getItem("gear-expertise-overrides");
+      const raw = localStorage.getItem(storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === "object") return parsed;
@@ -536,11 +536,15 @@
     } catch (e) { /* ignore corrupt storage */ }
     return {};
   }
-  function saveGearExpertise() {
-    try { localStorage.setItem("gear-expertise-overrides", JSON.stringify(state.gearExpertise)); } catch (e) { /* storage may be unavailable */ }
+  function saveExpertiseOverrides(storageKey, obj) {
+    try { localStorage.setItem(storageKey, JSON.stringify(obj)); } catch (e) { /* storage may be unavailable */ }
   }
+  function loadGearExpertise() { return loadExpertiseOverrides("gear-expertise-overrides"); }
+  function saveGearExpertise() { saveExpertiseOverrides("gear-expertise-overrides", state.gearExpertise); }
+  function loadWeaponExpertise() { return loadExpertiseOverrides("weapon-expertise-overrides"); }
+  function saveWeaponExpertise() { saveExpertiseOverrides("weapon-expertise-overrides", state.weaponExpertise); }
 
-  const state = { weapons: {}, gear: {}, skills: {}, spec: null, shd: loadSHD(), expertise: loadExpertise(), gearExpertise: loadGearExpertise() };
+  const state = { weapons: {}, gear: {}, skills: {}, spec: null, shd: loadSHD(), expertise: loadExpertise(), gearExpertise: loadGearExpertise(), weaponExpertise: loadWeaponExpertise() };
   let summaryOpen = false;
   let attachExpanded = {}; // weapon slot key -> bool, session-only UI state
 
@@ -561,6 +565,18 @@
   function qClass(quality) { return quality ? quality.replace(/\s+/g, "") : ""; }
   function stripHtml(html) { return html.replace(/<[^>]*>/g, " "); }
   function fmt(n) { return Math.round(n).toLocaleString(); }
+  function escapeAttr(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;"); }
+  // Critical Hit Chance caps at 60% in game - anything rolled above that is wasted. Color the
+  // number red once you're over (not just at) the cap, and give it a tooltip breaking down
+  // every source that adds up to the uncapped total, so it's obvious what to pull back on.
+  const CHC_CAP = 60;
+  function chcDisplayHtml(chc, sources) {
+    const rounded = Math.round(chc);
+    const over = rounded > CHC_CAP;
+    const lines = (sources || []).map((s) => s.source + ": +" + Math.round(s.amount) + "%").join("\n");
+    const tooltip = lines ? "Uncapped total: " + rounded + "%\n\n" + lines : "";
+    return '<span' + (over ? ' style="color:var(--red)"' : "") + (tooltip ? ' title="' + escapeAttr(tooltip) + '"' : "") + '>' + rounded + '%</span>';
+  }
 
   // Exotic > Named > Gear Set > everything else (High-End), then alphabetical within each tier
   // handles both full names (Exotic/Gearset/Named/High End) and the single-letter
@@ -660,7 +676,7 @@
   }
 
   function computeCurrent(shdOverride) {
-    return Engine.computeLoadout({ weapons: state.weapons, gear: state.gear, specialization: state.spec ? { name: state.spec } : null, skills: state.skills, shd: shdOverride !== undefined ? shdOverride : state.shd, expertiseLevel: state.expertise, gearExpertise: state.gearExpertise });
+    return Engine.computeLoadout({ weapons: state.weapons, gear: state.gear, specialization: state.spec ? { name: state.spec } : null, skills: state.skills, shd: shdOverride !== undefined ? shdOverride : state.shd, expertiseLevel: state.expertise, gearExpertise: state.gearExpertise, weaponExpertise: state.weaponExpertise });
   }
 
   // =================== INVENTORY: compact expandable stat summary ===================
@@ -669,18 +685,17 @@
     const p = result.weaponStats.Primary;
     // Critical Hit Chance can't exceed 60% in game - flag it the moment a build reaches or
     // passes that cap, both inline in the detail and as a small always-visible dot on the chip.
-    const CHC_CAP = 60;
     const chcCapped = !!(p && p.chc >= CHC_CAP);
     const chips = [
       {
         key: "damage", label: "Weapon Damage", value: p ? fmt(p.totalDamage) : "—", sub: p ? "+" + Math.round(p.totalPct) + "%" : "",
         detail: p ? [
           ["Base Damage", fmt(p.baseDamage)],
-          ["Expertise Bonus", "+" + result.totals.expertiseLevel + "%"],
+          ["Expertise Bonus", "+" + p.expertiseLevel + "%"],
           ["Total Damage", fmt(p.totalDamage)],
           ["Headshot Damage", Math.round(p.hsd) + "%"],
           ["Critical Hit Damage", Math.round(p.chd) + "%"],
-          ["Critical Hit Chance", Math.round(p.chc) + "%" + (chcCapped ? ' <span class="cap-badge" title="Critical Hit Chance caps at 60% in game">' + CHC_CAP + '% CAP</span>' : "")],
+          ["Critical Hit Chance", chcDisplayHtml(p.chc, p.chcSources) + (chcCapped ? ' <span class="cap-badge" title="Critical Hit Chance caps at 60% in game">' + CHC_CAP + '% CAP</span>' : "")],
           ["RPM / Magazine", p.rpm + " / " + p.magSize],
         ] : [["No primary weapon equipped", "—"]],
       },
@@ -813,7 +828,7 @@
       const rows = w ? [
         ["Base Damage", fmt(w.baseDamage)], ["Total Damage", fmt(w.totalDamage)], ["Damage to Armored", fmt(w.dmgToArmored)],
         ["Damage Out of Cover", fmt(w.dmgToOutOfCover)], ["Headshot Damage", Math.round(w.hsd) + "%"], ["Critical Hit Damage", Math.round(w.chd) + "%"],
-        ["Critical Hit Chance", Math.round(w.chc) + "%"], ["RPM", w.rpm],
+        ["Critical Hit Chance", chcDisplayHtml(w.chc, w.chcSources)], ["RPM", w.rpm],
         ["Magazine Size", w.totalMagSize !== w.magSize ? w.totalMagSize + " (base " + w.magSize + ")" : w.magSize],
         ["Reload Speed", (w.reloadSpeedMs / 1000).toFixed(2) + "s" + (w.reloadSpeedPct ? " (" + (w.reloadSpeedPct > 0 ? "+" : "") + Math.round(w.reloadSpeedPct) + "%)" : "")],
       ].concat(w.weapon.core2 && w.weapon.core2.stat ? [["Core 2 (" + w.weapon.core2.stat + ")", "+" + w.weapon.core2.max]] : []) : [["No weapon equipped", "—"]];
@@ -882,6 +897,16 @@
     document.getElementById("depthTalents").innerHTML = html || '<div class="empty-inline">No talents or set bonuses active yet.</div>';
   }
 
+  // this weapon's own expertise (defaults to the shared level unless overridden) - purely a
+  // damage-% input for weapons, unlike gear's armor display, so just the field itself
+  function weaponExpertiseRowHtml(slotKey) {
+    const lvl = state.weaponExpertise[slotKey] != null ? state.weaponExpertise[slotKey] : state.expertise;
+    return '<div class="gear-exp-row">' +
+      '<span class="gear-exp-armor">+' + lvl + '% Weapon Damage</span>' +
+      '<span class="gear-exp-field">EXP <input type="number" class="gear-exp-input" min="0" max="30" value="' + lvl + '" data-weapon-exp="' + slotKey + '"></span>' +
+    '</div>';
+  }
+
   function renderWeaponGrid() {
     const el = document.getElementById("weaponGrid");
     el.innerHTML = WEAPON_SLOTS.map((s) => {
@@ -899,15 +924,23 @@
           (item ? '<span class="tile-subtype">' + item.weaponType + '</span>' : "") +
           (item ? '<span class="qtag q-' + qClass(item.quality) + '">' + item.quality + '</span>' : "") +
         '</div>' +
+        (item ? weaponExpertiseRowHtml(s.key) : "") +
         (item ? weaponRollRowsHtml(item, s.key) : "") + talentHtml +
         '</div>';
     }).join("");
     el.querySelectorAll("[data-weapon-slot]").forEach((elm) => elm.addEventListener("click", () => openWeaponPicker(elm.dataset.weaponSlot)));
     // the whole tile opens the picker, so every interactive control inside it must stop the
     // click from bubbling there — selects/inputs open/type as normal instead of also popping the picker
-    el.querySelectorAll(".roll-select, .roll-input, .attach-select").forEach((elm) => elm.addEventListener("click", (e) => e.stopPropagation()));
+    el.querySelectorAll(".roll-select, .roll-input, .attach-select, .gear-exp-row").forEach((elm) => elm.addEventListener("click", (e) => e.stopPropagation()));
+    el.querySelectorAll("[data-weapon-exp]").forEach((inp) => inp.addEventListener("change", () => setWeaponExpertise(inp.dataset.weaponExp, Number(inp.value))));
     el.querySelectorAll("[data-pick-weapon-talent]").forEach((elm) => elm.addEventListener("click", (e) => { e.stopPropagation(); openWeaponTalentPicker(elm.dataset.pickWeaponTalent); }));
-    el.querySelectorAll("[data-unequip-weapon]").forEach((elm) => elm.addEventListener("click", (e) => { e.stopPropagation(); state.weapons[elm.dataset.unequipWeapon] = null; renderInventory(); }));
+    el.querySelectorAll("[data-unequip-weapon]").forEach((elm) => elm.addEventListener("click", (e) => {
+      e.stopPropagation();
+      state.weapons[elm.dataset.unequipWeapon] = null;
+      delete state.weaponExpertise[elm.dataset.unequipWeapon];
+      saveWeaponExpertise();
+      renderInventory();
+    }));
     el.querySelectorAll(".roll-select").forEach((sel) => sel.addEventListener("change", (e) => {
       const field = sel.dataset.rollField, weaponKey = sel.dataset.rollSlot;
       const item = state.weapons[weaponKey];
@@ -1295,7 +1328,11 @@
     // otherwise a dead "Pistol" tab shows up that always renders "No matches."
     const availableTypes = WEAPON_TYPES.filter((t) => pool.some((w) => w["Weapon Type"] === t));
     const opts = cfg.slot === "S" ? {} : { categories: availableTypes, categorize: (w) => w["Weapon Type"] };
-    openPicker("Select " + cfg.label, items, Engine.resolveWeapon, weaponRowHtml, (w) => { state.weapons[slotKey] = w; }, opts);
+    openPicker("Select " + cfg.label, items, Engine.resolveWeapon, weaponRowHtml, (w) => {
+      state.weapons[slotKey] = w;
+      delete state.weaponExpertise[slotKey];
+      saveWeaponExpertise();
+    }, opts);
   }
   function openGearPicker(slot) {
     let pool = DATA.gear[slot];
@@ -1344,16 +1381,24 @@
       (t) => talentPickerRow(t.Talent, t.Desc),
       (t) => { state.gear[slot].talent = t; state.gear[slot].talentAssumed = false; });
   }
-  document.getElementById("clearBtn").addEventListener("click", () => { state.weapons = {}; state.gear = {}; state.skills = {}; state.spec = null; state.gearExpertise = {}; saveGearExpertise(); renderInventory(); });
+  document.getElementById("clearBtn").addEventListener("click", () => {
+    state.weapons = {}; state.gear = {}; state.skills = {}; state.spec = null;
+    state.gearExpertise = {}; saveGearExpertise();
+    state.weaponExpertise = {}; saveWeaponExpertise();
+    renderInventory();
+  });
 
-  // changing the shared level always wins over any per-piece override, on the theory that
-  // touching this control means "set everything to this" - see loadGearExpertise() above.
+  // changing the shared level always wins over any per-piece override (gear or weapon), on
+  // the theory that touching this control means "set everything to this" - see
+  // loadExpertiseOverrides() above.
   function setExpertise(v) {
     if (isNaN(v)) v = 30;
     state.expertise = Math.max(0, Math.min(30, v));
     state.gearExpertise = {};
+    state.weaponExpertise = {};
     saveExpertise();
     saveGearExpertise();
+    saveWeaponExpertise();
     renderInventory();
   }
   document.getElementById("expertiseInput").addEventListener("change", (e) => setExpertise(Number(e.target.value)));
@@ -1363,6 +1408,12 @@
     if (isNaN(v)) v = state.expertise;
     state.gearExpertise[slot] = Math.max(0, Math.min(30, v));
     saveGearExpertise();
+    renderInventory();
+  }
+  function setWeaponExpertise(slot, v) {
+    if (isNaN(v)) v = state.expertise;
+    state.weaponExpertise[slot] = Math.max(0, Math.min(30, v));
+    saveWeaponExpertise();
     renderInventory();
   }
 
@@ -1590,12 +1641,13 @@
     if (shdNonzero.length) out.shd = shdNonzero;
     if (state.expertise !== 30) out.exp = state.expertise;
     if (Object.keys(state.gearExpertise).length) out.gexp = state.gearExpertise;
+    if (Object.keys(state.weaponExpertise).length) out.wexp = state.weaponExpertise;
     return out;
   }
   function updateUrl() {
     try {
       const data = serializeState();
-      const hasAny = Object.keys(data.w).length || Object.keys(data.g).length || Object.keys(data.sk).length || data.sp || (data.shd && data.shd.length) || data.exp != null || data.gexp;
+      const hasAny = Object.keys(data.w).length || Object.keys(data.g).length || Object.keys(data.sk).length || data.sp || (data.shd && data.shd.length) || data.exp != null || data.gexp || data.wexp;
       const hash = hasAny ? "#b=" + encodeURIComponent(JSON.stringify(data)) : "";
       history.replaceState(null, "", location.pathname + location.search + hash);
     } catch (e) { /* URL persistence is a convenience, never block the app on it */ }
@@ -1681,6 +1733,10 @@
     if (data.gexp) {
       state.gearExpertise = {};
       Object.entries(data.gexp).forEach(([slot, v]) => { state.gearExpertise[slot] = Math.max(0, Math.min(30, Number(v))); });
+    }
+    if (data.wexp) {
+      state.weaponExpertise = {};
+      Object.entries(data.wexp).forEach(([slot, v]) => { state.weaponExpertise[slot] = Math.max(0, Math.min(30, Number(v))); });
     }
   }
 
