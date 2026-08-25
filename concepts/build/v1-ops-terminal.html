@@ -574,8 +574,8 @@
     return Object.entries(state.gear).some(([slot, g]) => slot !== excludeSlot && g && g.quality === "Exotic");
   }
 
-  function computeCurrent() {
-    return Engine.computeLoadout({ weapons: state.weapons, gear: state.gear, specialization: state.spec ? { name: state.spec } : null, skills: state.skills, shd: state.shd, expertiseLevel: state.expertise });
+  function computeCurrent(shdOverride) {
+    return Engine.computeLoadout({ weapons: state.weapons, gear: state.gear, specialization: state.spec ? { name: state.spec } : null, skills: state.skills, shd: shdOverride !== undefined ? shdOverride : state.shd, expertiseLevel: state.expertise });
   }
 
   // =================== INVENTORY: compact expandable stat summary ===================
@@ -677,28 +677,35 @@
   function renderAttributeStrip() {
     const result = computeCurrent();
     const p = result.weaponStats.Primary;
+    // SHD Watch grants a lot of these same stats - only show one here if something OTHER than
+    // SHD (gear, weapon, brand, specialization) also provides it, by comparing against the
+    // same build with SHD stripped out. The displayed amount still includes SHD's contribution.
+    const resultNoShd = computeCurrent([]);
+    const pNoShd = resultNoShd.weaponStats.Primary;
 
     const primary = [];
-    if (p) primary.push(["Weapon Damage", fmtPct(p.totalPct), "O"]);
+    if (p) { if (pNoShd && pNoShd.totalPct) primary.push(["Weapon Damage", fmtPct(p.totalPct), "O"]); }
     else {
       const awd = result.stats.Cores.Offensive.reduce((a, b) => a + b, 0);
-      if (awd) primary.push(["Weapon Damage", fmtPct(awd), "O"]);
+      const awdNoShd = resultNoShd.stats.Cores.Offensive.reduce((a, b) => a + b, 0);
+      if (awd && awdNoShd) primary.push(["Weapon Damage", fmtPct(awd), "O"]);
     }
-    if (result.totals.skillTier) primary.push(["Skill Tier", String(result.totals.skillTier), "U"]);
+    if (result.totals.skillTier && resultNoShd.totals.skillTier) primary.push(["Skill Tier", String(result.totals.skillTier), "U"]);
     const totalArmorPct = result.stats.Defensive["Total Armor"] || 0;
-    if (totalArmorPct) primary.push(["Total Armor", fmtPct(totalArmorPct), "D"]);
+    if (totalArmorPct && (resultNoShd.stats.Defensive["Total Armor"] || 0)) primary.push(["Total Armor", fmtPct(totalArmorPct), "D"]);
 
     const secondary = [];
     const exclude = new Set(["Weapon Damage", "Total Armor", "Skill Tier", ...WEAPON_TYPE_DAMAGE_STATS]);
     if (p) {
-      secondary.push(["Critical Hit Chance", fmtPct(p.chc), "O"]);
-      secondary.push(["Critical Hit Damage", fmtPct(p.chd), "O"]);
+      if (pNoShd && pNoShd.chc) secondary.push(["Critical Hit Chance", fmtPct(p.chc), "O"]);
+      if (pNoShd && pNoShd.chd) secondary.push(["Critical Hit Damage", fmtPct(p.chd), "O"]);
       exclude.add("Critical Hit Chance");
       exclude.add("Critical Hit Damage");
     }
     [["Offensive", "O"], ["Defensive", "D"], ["Utility", "U"]].forEach(([cat, code]) => {
       Object.entries(result.stats[cat]).forEach(([k, v]) => {
         if (exclude.has(k) || !v) return;
+        if (!(resultNoShd.stats[cat][k] || 0)) return;
         secondary.push([k, fmtStat(k, v), code]);
       });
     });
