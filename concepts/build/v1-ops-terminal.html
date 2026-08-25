@@ -94,6 +94,8 @@
   .quality-strip .qs-named .qs-label, .quality-strip .qs-named .qs-item { color: var(--q-named-text); }
   .quality-strip .qs-gearset .qs-label, .quality-strip .qs-gearset .qs-item { color: var(--q-gearset); }
   .quality-strip .qs-item:not(:last-child)::after { content: ", "; color: var(--muted); }
+  .quality-strip .qs-attr .qs-label { color: var(--muted); }
+  .quality-strip .qs-attr .qs-item { color: var(--text); }
 
   /* ---------- loadout-wide settings: expertise stepper + SHD watch toggle ---------- */
   .loadout-settings { display: flex; flex-wrap: wrap; gap: 2px; background: var(--line); border: 1px solid var(--line); }
@@ -314,6 +316,7 @@
         <div class="stat-chips" id="statChips"></div>
         <div class="stat-details" id="statDetails"></div>
       </div>
+      <div class="quality-strip" id="attributeStrip"></div>
       <div class="quality-strip" id="qualityStrip"></div>
       <div class="loadout-settings">
         <div class="setting-card">
@@ -592,6 +595,22 @@
     document.getElementById("qualityStrip").innerHTML = groups.length ? groups.join("") : '<span class="qs-empty">No exotics, named items, or gearsets equipped.</span>';
   }
 
+  // =================== INVENTORY: gear core/attribute tally (Nx Weapon Damage, Nx Crit Chance, ...) ===================
+  function renderAttributeStrip() {
+    const counts = {};
+    const bump = (name) => { if (name) counts[name] = (counts[name] || 0) + 1; };
+    GEAR_SLOTS.forEach((s) => {
+      const g = state.gear[s.key];
+      if (!g) return;
+      [g.core, g.coreTwo, g.coreThree].forEach((c) => bump(c && c.label));
+      [g.attribute1, g.attribute2, g.attribute3].forEach((a) => bump(a && a.Stat));
+    });
+    const items = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    document.getElementById("attributeStrip").innerHTML = items.length
+      ? '<span class="qs-group qs-attr"><span class="qs-label">Gear Attributes</span>' + items.map(([name, n]) => '<span class="qs-item">' + n + '×' + name + '</span>').join("") + '</span>'
+      : '<span class="qs-empty">No gear equipped yet.</span>';
+  }
+
   // =================== INVENTORY: in-depth details ===================
   function renderDepthTables() {
     const result = computeCurrent();
@@ -830,7 +849,7 @@
     el.querySelectorAll("[data-skill]").forEach((elm) => elm.addEventListener("click", () => openSkillPicker(elm.dataset.skill)));
   }
 
-  function renderInventory() { renderStatSummary(); renderQualityStrip(); renderLoadoutSettings(); renderWeaponGrid(); renderGearGrid(); renderSkillGrid(); renderDepthTables(); updateUrl(); }
+  function renderInventory() { renderStatSummary(); renderAttributeStrip(); renderQualityStrip(); renderLoadoutSettings(); renderWeaponGrid(); renderGearGrid(); renderSkillGrid(); renderDepthTables(); updateUrl(); }
 
   // =================== PICKER (shared, with real resolved attributes shown) ===================
   const dialog = document.getElementById("pickerDialog");
