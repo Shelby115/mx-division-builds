@@ -181,10 +181,11 @@
   .gear-grid { grid-template-columns: repeat(2, 1fr); }
   @media (max-width: 560px) { .gear-grid { grid-template-columns: 1fr; } }
   .item-tile {
-    background: var(--panel-2); border-left: 4px solid var(--line); padding: 12px; min-height: 92px;
+    background: var(--panel-2); border-left: 4px solid var(--line); padding: 10px 12px; min-height: 56px;
     display: flex; flex-direction: column; justify-content: flex-start; gap: 8px; position: relative;
   }
   .item-tile[data-weapon-slot], .item-tile[data-gear-slot] { cursor: pointer; }
+  .item-tile[data-weapon-slot]:hover .tile-name-inline, .item-tile[data-gear-slot]:hover .tile-name-inline,
   .item-tile[data-weapon-slot]:hover .tile-name, .item-tile[data-gear-slot]:hover .tile-name { text-decoration: underline; }
   .item-tile:hover { background: var(--accent-dim); }
   .item-tile.core-O { border-left-color: var(--red); }
@@ -194,9 +195,15 @@
   .item-tile .tile-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; flex-shrink: 0; }
   .item-tile .tile-icon { width: 15px; height: 15px; opacity: .85; flex-shrink: 0; }
   .item-tile .tile-subtype {
-    font-family: var(--font-mono); font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: var(--font-mono); font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; max-width: 90px;
   }
   .item-tile .tile-subtype::before { content: "· "; }
+  .item-tile .tile-top .qtag { flex-shrink: 0; }
+  .item-tile .tile-name-inline {
+    font-family: var(--font-body); font-weight: 600; font-size: 14px; line-height: 1.25;
+    flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .item-tile .tile-name-inline.placeholder { color: var(--muted); font-weight: 400; font-style: italic; }
   .item-tile .tile-name { font-family: var(--font-body); font-weight: 600; font-size: 14px; margin-top: 2px; line-height: 1.25; }
   .item-tile .tile-name.placeholder { color: var(--muted); font-weight: 400; font-style: italic; }
   .item-tile .tile-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
@@ -204,11 +211,11 @@
   .item-tile.q-Named { box-shadow: inset 0 2px 0 var(--q-named); }
   .item-tile.q-Gearset { box-shadow: inset 0 2px 0 var(--q-gearset); }
   .item-tile.q-HighEnd { box-shadow: inset 0 2px 0 var(--q-highend); }
-  .q-Exotic .tile-name { color: var(--q-exotic); }
-  .q-Named .tile-name { color: var(--q-named-text); }
+  .q-Exotic .tile-name, .q-Exotic .tile-name-inline { color: var(--q-exotic); }
+  .q-Named .tile-name, .q-Named .tile-name-inline { color: var(--q-named-text); }
   .pitem.q-Named .piname { color: var(--q-named-text); }
-  .q-Gearset .tile-name { color: var(--q-gearset); }
-  .q-HighEnd .tile-name { color: var(--q-highend); }
+  .q-Gearset .tile-name, .q-Gearset .tile-name-inline { color: var(--q-gearset); }
+  .q-HighEnd .tile-name, .q-HighEnd .tile-name-inline { color: var(--q-highend); }
   .qtag { font-family: var(--font-mono); font-size: 9.5px; padding: 1px 6px; border-radius: 2px; text-transform: uppercase; letter-spacing: .04em; }
   .qtag.q-Exotic { background: var(--q-exotic); color: #1a0a06; }
   .qtag.q-Named { background: var(--q-named); color: #1a1206; }
@@ -536,17 +543,17 @@
   //
   // To add a keyword: find the group below by color/meaning and add every inflected form
   // you expect in talent text - list each one explicitly, don't auto-generate suffixes
-  // (irregular forms like "Bleeded" are wrong, so this stays a human judgment call). A
-  // word or phrase made only of letters/digits/spaces belongs in KEYWORD_GROUPS. A phrase
-  // with punctuation (parens/slashes break \b word-boundary matching) or a dynamic value
-  // (a number) belongs in PHRASE_PATTERNS instead.
+  // (irregular forms like "Bleeded" are wrong, so this stays a human judgment call). This
+  // covers phrases with surrounding punctuation too ("(from all sources)" still matches on
+  // just "from all sources" via \b, since \b only cares about the word's own edges, not
+  // what's beyond them). Only a match on a dynamic value (a number) needs PHRASE_PATTERNS.
   const KEYWORD_GROUPS = [
     { cls: "kw-damage", words: ["Weapon Damage", "Assault Rifle Damage", "LMG Damage", "Marksman Rifle Damage", "Pistol Damage", "Rifle Damage", "Shotgun Damage", "SMG Damage",
       "Critical Hit Chance", "Critical Hit Damage", "Critical Hits", "Critical Hit", "Headshot Damage", "Headshots", "Headshot", "Damage to Armor", "Damage to TOC", "Damage to Health", "Health Damage", "Damage to Electronics", "Explosive Damage", "Melee"] },
     { cls: "kw-utility", words: ["Reload Speed", "Stability", "Accuracy", "Magazine Size", "Weapon Handling", "Rate of Fire",
       "Optimal Range", "Swap Speed", "Ammo Capacity", "Extra Rounds", "Skill Haste", "Skill Damage", "Skill Duration", "Repair Skills", "Skill Tier", "Skill Efficiency", "Skill Health", "Status Effects", "Status Effect"] },
-    { cls: "kw-defense", words: ["Total Armor", "Bonus Armor", "Armor Regeneration", "Health", "Hazard Protection", "Explosive Resistance",
-      "Incoming Repairs", "Protection from Elites", "Armor on Kill", "Repairs", "Repair"] },
+    { cls: "kw-defense", words: ["Total Armor", "Bonus Armor", "Armor Regeneration", "Armor Regen", "Health", "Hazard Protection", "Explosive Resistance", "Damage Resistance",
+      "Incoming Repairs", "Protection from Elites", "Armor on Kill", "Repairs", "Repaired", "Repair", "RPM"] },
     // status effects proper - the debuffs with a dedicated Resistance stat, plus every inflected
     // form (-ed/-ing/-s) actually likely to appear in talent prose, not just the base word
     { cls: "kw-condition", words: ["Bleed Resistance", "Burn Resistance", "Shock Resistance", "Disrupt Resistance", "Disorient Resistance", "Ensnare Resistance", "Pulse Resistance", "Blind/Deaf Resistance",
@@ -565,15 +572,16 @@
     { cls: "kw-common-condition", words: ["Suppressed", "Suppression", "Suppressing", "Suppresses",
       "Pulsed", "Pulsing", "Pulses", "Pulse",
       "Poisoned", "Poisoning", "Poisons", "Poison",
-      "Swapping", "Swap", "Holstered", "Cover",
-      "Marked", "Marking", "Marks", "Mark"] },
+      "Swapping", "Swap", "Switching", "Holstered", "Cover",
+      "Marked", "Marking", "Marks", "Mark",
+      "Reloading", "Reloaded", "Reload"] },
     // skill names - "Ballistic Shield" is often just called "Shield" in talent text
     { cls: "kw-skill", words: ["Sticky Bomb", "Ballistic Shield", "Shield", "Chem Launcher", "Seeker Mine", "Smart Cover", "Trap", "Decoy", "Turret", "Hive", "Firefly", "Drone"] },
     { cls: "kw-explosive", words: ["Grenade", "Grenades", "Explosion", "Explosions", "Explosive", "Explosives", "Explode", "Exploded", "Exploding", "Explodes"] },
     { cls: "kw-stack", words: ["Stacks", "Stacking", "Stacked", "Stack"] },
     // reuses kw-distance's orange - these aren't distances, the user just wants the same color
-    { cls: "kw-distance", words: ["Skills", "Skill", "Allies", "Ally"] },
-    { cls: "kw-amplify", words: ["Amplifies", "Amplifying", "Amplify", "Amplified", "Amplification"] },
+    { cls: "kw-distance", words: ["Skills", "Skill", "Allies", "Ally", "Weakpoints", "Weakpoint", "Signature Weapon"] },
+    { cls: "kw-amplify", words: ["Amplifies", "Amplifying", "Amplify", "Amplified", "Amplification", "from all sources"] },
     { cls: "kw-exotic", words: ["Exotic"] },
     { cls: "kw-named", words: ["Named"] },
     { cls: "kw-highend", words: ["High End"] },
@@ -587,10 +595,9 @@
     "\\b(" + [...KW_MAP.keys()].sort((a, b) => b.length - a.length).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")\\b",
     "gi"
   );
-  // entries that can't go through KW_PATTERN: punctuation breaks \b word-boundary matching
-  // ("(from all sources)"), or the match is a dynamic value rather than a fixed word (distances)
+  // entries that can't go through KW_PATTERN because the match is a dynamic value rather
+  // than a fixed word (distances)
   const PHRASE_PATTERNS = [
-    { cls: "kw-amplify", re: /\(from all sources\)/gi },
     // "7m" / "7 meters" but not "9mm" (ammo caliber)
     { cls: "kw-distance", re: /\b\d+(?:\.\d+)?m\b(?!m)/g },
     { cls: "kw-distance", re: /\b\d+(?:\.\d+)?\s+meters?\b/gi },
@@ -848,8 +855,11 @@
       }
       return '<div class="item-tile' + q + '" data-weapon-slot="' + s.key + '">' +
         (item ? '<button class="tile-unequip" data-unequip-weapon="' + s.key + '" title="Unequip">✕</button>' : "") +
-        '<div class="tile-top">' + img("ui", s.icon, "tile-icon") + '<span class="tile-label">' + s.label + '</span>' + (item ? '<span class="tile-subtype">' + item.weaponType + '</span>' : "") + '</div>' +
-        '<div class="tile-name' + (item ? "" : " placeholder") + '">' + (item ? item.name + (item.variant !== item.name ? " (" + item.variant + ")" : "") : "Choose weapon") + '</div>' +
+        '<div class="tile-top">' + img("ui", s.icon, "tile-icon") + '<span class="tile-label">' + s.label + '</span>' +
+          '<span class="tile-name-inline' + (item ? "" : " placeholder") + '">' + (item ? item.name + (item.variant !== item.name ? " (" + item.variant + ")" : "") : "Choose weapon") + '</span>' +
+          (item ? '<span class="tile-subtype">' + item.weaponType + '</span>' : "") +
+          (item ? '<span class="qtag q-' + qClass(item.quality) + '">' + item.quality + '</span>' : "") +
+        '</div>' +
         (item ? weaponRollRowsHtml(item, s.key) : "") + talentHtml +
         '</div>';
     }).join("");
@@ -1024,8 +1034,11 @@
       }
       return '<div class="item-tile' + coreClass(item) + q + '" data-gear-slot="' + s.key + '">' +
         (item ? '<button class="tile-unequip" data-unequip-gear="' + s.key + '" title="Unequip">✕</button>' : "") +
-        '<div class="tile-top">' + img("ui", s.icon, "tile-icon") + '<span class="tile-label">' + s.key + '</span>' + (item ? '<span class="tile-subtype">' + item.brand + '</span>' : "") + '</div>' +
-        '<div class="tile-name' + (item ? "" : " placeholder") + '">' + (item ? item.name : "Choose " + s.key.toLowerCase()) + '</div>' +
+        '<div class="tile-top">' + img("ui", s.icon, "tile-icon") + '<span class="tile-label">' + s.key + '</span>' +
+          '<span class="tile-name-inline' + (item ? "" : " placeholder") + '">' + (item ? item.name : "Choose " + s.key.toLowerCase()) + '</span>' +
+          (item ? '<span class="tile-subtype">' + item.brand + '</span>' : "") +
+          (item ? '<span class="qtag q-' + qClass(item.quality) + '">' + item.quality + '</span>' : "") +
+        '</div>' +
         (item ? rollRowsHtml(item, s.key) : "") + talentHtml +
         '</div>';
     }).join("");
@@ -1083,7 +1096,7 @@
     const present = slots.filter(Boolean);
     const fixed = present.filter((a) => !a.selectable);
     const selectableCount = present.length - fixed.length;
-    const parts = fixed.map((a) => '<span>' + a.Stat + ' +' + a.Max + '</span>');
+    const parts = fixed.map((a) => '<span>' + compactDesc(a.Stat + " +" + a.Max) + '</span>');
     if (selectableCount) parts.push('<span>' + selectableCount + " Secondary Attribute" + (selectableCount > 1 ? "s" : "") + '</span>');
     return parts.join("");
   }
@@ -1099,9 +1112,9 @@
     return tiers;
   }
   function weaponRowHtml(w) {
-    const attrs = [];
-    attrs.push('<span>Core: ' + w.core1.stat + ' +' + w.core1.max + '%</span>');
-    if (w.core2 && w.core2.stat) attrs.push('<span>Core 2: ' + w.core2.stat + ' +' + w.core2.max + '</span>');
+    const cores = [w.core1.max + "% " + w.core1.stat];
+    if (w.core2 && w.core2.stat) cores.push(w.core2.max + "% " + w.core2.stat);
+    const attrs = ['<span>' + compactDesc(cores.join(", ")) + '</span>'];
     attrs.push(secondaryAttrsHtml([w.attribute1]));
     return '<span class="piname">' + w.name + (w.variant !== w.name ? " (" + w.variant + ")" : "") + '</span>' +
       '<span class="piquality"><span class="qtag q-' + qClass(w.quality) + '">' + w.quality + '</span> ' + w.weaponType + '</span>' +
@@ -1178,8 +1191,12 @@
     let pool = DATA.weapons.filter((w) => w.Slot === cfg.slot);
     if (hasExoticWeaponElsewhere(slotKey)) pool = pool.filter((w) => w.Quality !== "Exotic");
     const items = sortByQuality(pool, (w) => w.Quality, (w) => w.Name);
-    // sidearms are pistol-only, so a category picker would be pointless there
-    const opts = cfg.slot === "S" ? {} : { categories: WEAPON_TYPES, categorize: (w) => w["Weapon Type"] };
+    // sidearms are pistol-only, so a category picker would be pointless there. And Primary/
+    // Secondary can never contain a Pistol (filtered out by cfg.slot above), so build the
+    // category list from what's actually in this pool rather than the full WEAPON_TYPES list -
+    // otherwise a dead "Pistol" tab shows up that always renders "No matches."
+    const availableTypes = WEAPON_TYPES.filter((t) => pool.some((w) => w["Weapon Type"] === t));
+    const opts = cfg.slot === "S" ? {} : { categories: availableTypes, categorize: (w) => w["Weapon Type"] };
     openPicker("Select " + cfg.label, items, Engine.resolveWeapon, weaponRowHtml, (w) => { state.weapons[slotKey] = w; }, opts);
   }
   function openGearPicker(slot) {
