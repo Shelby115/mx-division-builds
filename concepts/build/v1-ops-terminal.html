@@ -7,7 +7,7 @@
   :root {
     --bg: #0a0a09; --panel: #14140f; --panel-2: #1c1c15; --line: #33321f;
     --text: #ece9df; --muted: #948f78; --accent: #f2711c; --accent-dim: #4a2a0d;
-    --red: #cf3f2e; --blue: #3a86c8; --yellow: #e0b62f; --purple: #c084fc; --cyan: #22d3ee; --green: #4ade80; --amber: #f59e0b;
+    --red: #cf3f2e; --blue: #3a86c8; --yellow: #e0b62f; --purple: #c084fc; --cyan: #22d3ee; --green: #4ade80; --amber: #f59e0b; --indigo: #818cf8;
     --q-exotic: #d9432e; --q-named: #e3a73b; --q-gearset: #2fa89c; --q-highend: #e3a73b; --q-named-text: #e85dae;
     --kw-exotic: #f2711c; --kw-named: #e85dae; --kw-highend: #e0b62f; --kw-amplify: #9dff1f;
     --font-display: "Oswald", "Arial Narrow", sans-serif;
@@ -18,7 +18,7 @@
     :root:not([data-theme="dark"]):not([data-theme="light"]) {
       --bg: #eeece3; --panel: #ffffff; --panel-2: #f5f3e9; --line: #d8d4bf;
       --text: #201e15; --muted: #6b6752; --accent: #c05a12; --accent-dim: #f4ddc6;
-      --kw-amplify: #5a8f00; --purple: #8b5cf6; --cyan: #0e7490; --green: #15803d; --amber: #b45309;
+      --kw-amplify: #5a8f00; --purple: #8b5cf6; --cyan: #0e7490; --green: #15803d; --amber: #b45309; --indigo: #4338ca;
     }
   }
   :root[data-theme="light"] {
@@ -263,6 +263,7 @@
   .kw-common-condition { color: var(--cyan); font-weight: 600; }
   .kw-skill { color: var(--green); font-weight: 600; }
   .kw-explosive { color: var(--amber); font-weight: 600; }
+  .kw-stack { color: var(--indigo); font-weight: 600; }
   .kw-distance { color: var(--accent); font-weight: 600; }
 
   /* ---------- SHD WATCH ---------- */
@@ -325,9 +326,7 @@
   .pitem .piattrs .mod-slot-tag { display: inline-flex; align-items: center; gap: 4px; }
   .pitem .piattrs .mod-slot-icon { width: 13px; height: 13px; opacity: .85; }
   .pitem .pitalent { grid-column: 1 / -1; font-size: 12.5px; }
-  .pitem .pi-tiers { grid-column: 1 / -1; font-size: 11.5px; font-family: var(--font-mono); }
-  .pitem .pi-tiers.is-gearset { color: var(--q-gearset); }
-  .pitem .pi-tiers.is-brand { color: var(--q-highend); }
+  .pitem .pi-tiers { grid-column: 1 / -1; font-size: 11.5px; font-family: var(--font-mono); color: var(--muted); line-height: 1.5; }
   .pitem .pitalent .tt-name { font-weight: 600; color: var(--accent); }
   .pitem .pitalent .tt-desc { color: var(--muted); margin-top: 3px; line-height: 1.4; white-space: pre-line; }
   .empty-note { padding: 30px 18px; text-align: center; color: var(--muted); font-size: 13.5px; }
@@ -534,52 +533,72 @@
   // "Amplify" keyword (multiplicative, not additive, damage), the stat category a bonus
   // belongs to (red=damage, yellow=utility/skill, blue=defense), status effects/conditions
   // a talent triggers on or inflicts, and distances (the game's own orange).
-  const KW_DAMAGE = ["Weapon Damage", "Assault Rifle Damage", "LMG Damage", "Marksman Rifle Damage", "Pistol Damage", "Rifle Damage", "Shotgun Damage", "SMG Damage",
-    "Critical Hit Chance", "Critical Hit Damage", "Headshot Damage", "Damage to Armor", "Damage to TOC", "Damage to Health", "Health Damage", "Damage to Electronics", "Explosive Damage"];
-  const KW_UTILITY = ["Reload Speed", "Stability", "Accuracy", "Magazine Size", "Weapon Handling", "Rate of Fire",
-    "Optimal Range", "Swap Speed", "Ammo Capacity", "Extra Rounds", "Skill Haste", "Skill Damage", "Skill Duration", "Repair Skills", "Skill Tier", "Skill Efficiency", "Skill Health", "Status Effects", "Status Effect"];
-  const KW_DEFENSE = ["Total Armor", "Armor Regeneration", "Health", "Hazard Protection", "Explosive Resistance",
-    "Incoming Repairs", "Protection from Elites", "Armor on Kill", "Repairs", "Repair"];
-  // status effects proper - the debuffs with a dedicated Resistance stat, plus every inflected
-  // form (-ed/-ing/-s) actually likely to appear in talent prose, not just the base word
-  const KW_CONDITION = ["Bleed Resistance", "Burn Resistance", "Shock Resistance", "Disrupt Resistance", "Disorient Resistance", "Ensnare Resistance", "Pulse Resistance", "Blind/Deaf Resistance",
-    "Bleed", "Bleeding", "Bleeds", "Bled",
-    "Burn", "Burned", "Burning", "Burns",
-    "Shock", "Shocked", "Shocking", "Shocks",
-    "Disrupt", "Disrupted", "Disrupting", "Disrupts",
-    "Disorient", "Disoriented", "Disorienting", "Disorients",
-    "Ensnare", "Ensnared", "Ensnaring", "Ensnares",
-    "Blind", "Blinded", "Blinding", "Blinds",
-    "Deaf", "Deafened",
-    "Confuse", "Confused", "Confusing", "Confuses"];
-  // common battlefield states that aren't resistance-gated status effects (Suppressed isn't
-  // resisted like Bleed/Burn are; Pulse here means "revealed by a Pulse", not Pulse Resistance)
-  const KW_COMMON_CONDITION = ["Suppressed", "Suppression", "Suppressing", "Suppresses",
-    "Pulsed", "Pulsing", "Pulses", "Pulse"];
-  // skill names - "Ballistic Shield" is often just called "Shield" in talent text
-  const KW_SKILL = ["Sticky Bomb", "Ballistic Shield", "Shield", "Chem Launcher", "Seeker Mine", "Smart Cover", "Trap", "Decoy", "Turret", "Hive", "Firefly", "Drone"];
-  const KW_EXPLOSIVE = ["Grenade", "Grenades", "Explosion", "Explosions", "Explosive", "Explosives", "Explode", "Exploded", "Exploding", "Explodes"];
+  //
+  // To add a keyword: find the group below by color/meaning and add every inflected form
+  // you expect in talent text - list each one explicitly, don't auto-generate suffixes
+  // (irregular forms like "Bleeded" are wrong, so this stays a human judgment call). A
+  // word or phrase made only of letters/digits/spaces belongs in KEYWORD_GROUPS. A phrase
+  // with punctuation (parens/slashes break \b word-boundary matching) or a dynamic value
+  // (a number) belongs in PHRASE_PATTERNS instead.
+  const KEYWORD_GROUPS = [
+    { cls: "kw-damage", words: ["Weapon Damage", "Assault Rifle Damage", "LMG Damage", "Marksman Rifle Damage", "Pistol Damage", "Rifle Damage", "Shotgun Damage", "SMG Damage",
+      "Critical Hit Chance", "Critical Hit Damage", "Critical Hits", "Critical Hit", "Headshot Damage", "Headshots", "Headshot", "Damage to Armor", "Damage to TOC", "Damage to Health", "Health Damage", "Damage to Electronics", "Explosive Damage", "Melee"] },
+    { cls: "kw-utility", words: ["Reload Speed", "Stability", "Accuracy", "Magazine Size", "Weapon Handling", "Rate of Fire",
+      "Optimal Range", "Swap Speed", "Ammo Capacity", "Extra Rounds", "Skill Haste", "Skill Damage", "Skill Duration", "Repair Skills", "Skill Tier", "Skill Efficiency", "Skill Health", "Status Effects", "Status Effect"] },
+    { cls: "kw-defense", words: ["Total Armor", "Bonus Armor", "Armor Regeneration", "Health", "Hazard Protection", "Explosive Resistance",
+      "Incoming Repairs", "Protection from Elites", "Armor on Kill", "Repairs", "Repair"] },
+    // status effects proper - the debuffs with a dedicated Resistance stat, plus every inflected
+    // form (-ed/-ing/-s) actually likely to appear in talent prose, not just the base word
+    { cls: "kw-condition", words: ["Bleed Resistance", "Burn Resistance", "Shock Resistance", "Disrupt Resistance", "Disorient Resistance", "Ensnare Resistance", "Pulse Resistance", "Blind/Deaf Resistance",
+      "Bleed", "Bleeding", "Bleeds", "Bled",
+      "Burn", "Burned", "Burning", "Burns",
+      "Shock", "Shocked", "Shocking", "Shocks",
+      "Disrupt", "Disrupted", "Disrupting", "Disrupts",
+      "Disorient", "Disoriented", "Disorienting", "Disorients",
+      "Ensnare", "Ensnared", "Ensnaring", "Ensnares",
+      "Blind", "Blinded", "Blinding", "Blinds",
+      "Deaf", "Deafened",
+      "Confuse", "Confused", "Confusing", "Confuses",
+      "EMP", "EMPed"] },
+    // common battlefield states that aren't resistance-gated status effects (Suppressed isn't
+    // resisted like Bleed/Burn are; Pulse here means "revealed by a Pulse", not Pulse Resistance)
+    { cls: "kw-common-condition", words: ["Suppressed", "Suppression", "Suppressing", "Suppresses",
+      "Pulsed", "Pulsing", "Pulses", "Pulse",
+      "Poisoned", "Poisoning", "Poisons", "Poison",
+      "Swapping", "Swap", "Holstered", "Cover",
+      "Marked", "Marking", "Marks", "Mark"] },
+    // skill names - "Ballistic Shield" is often just called "Shield" in talent text
+    { cls: "kw-skill", words: ["Sticky Bomb", "Ballistic Shield", "Shield", "Chem Launcher", "Seeker Mine", "Smart Cover", "Trap", "Decoy", "Turret", "Hive", "Firefly", "Drone"] },
+    { cls: "kw-explosive", words: ["Grenade", "Grenades", "Explosion", "Explosions", "Explosive", "Explosives", "Explode", "Exploded", "Exploding", "Explodes"] },
+    { cls: "kw-stack", words: ["Stacks", "Stacking", "Stacked", "Stack"] },
+    // reuses kw-distance's orange - these aren't distances, the user just wants the same color
+    { cls: "kw-distance", words: ["Skills", "Skill", "Allies", "Ally"] },
+    { cls: "kw-amplify", words: ["Amplifies", "Amplifying", "Amplify", "Amplified", "Amplification"] },
+    { cls: "kw-exotic", words: ["Exotic"] },
+    { cls: "kw-named", words: ["Named"] },
+    { cls: "kw-highend", words: ["High End"] },
+  ];
   // one combined map + single regex pass (longest phrase first) rather than one pass per
   // category - running separate passes let a short word like "Health" re-match text a longer
   // phrase ("Skill Health") had already wrapped in the previous pass, nesting spans.
   const KW_MAP = new Map();
-  [[KW_DAMAGE, "kw-damage"], [KW_UTILITY, "kw-utility"], [KW_DEFENSE, "kw-defense"], [KW_CONDITION, "kw-condition"], [KW_COMMON_CONDITION, "kw-common-condition"], [KW_SKILL, "kw-skill"], [KW_EXPLOSIVE, "kw-explosive"]].forEach(([list, cls]) => {
-    list.forEach((w) => KW_MAP.set(w.toLowerCase(), cls));
-  });
+  KEYWORD_GROUPS.forEach(({ cls, words }) => words.forEach((w) => KW_MAP.set(w.toLowerCase(), cls)));
   const KW_PATTERN = new RegExp(
     "\\b(" + [...KW_MAP.keys()].sort((a, b) => b.length - a.length).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")\\b",
     "gi"
   );
+  // entries that can't go through KW_PATTERN: punctuation breaks \b word-boundary matching
+  // ("(from all sources)"), or the match is a dynamic value rather than a fixed word (distances)
+  const PHRASE_PATTERNS = [
+    { cls: "kw-amplify", re: /\(from all sources\)/gi },
+    // "7m" / "7 meters" but not "9mm" (ammo caliber)
+    { cls: "kw-distance", re: /\b\d+(?:\.\d+)?m\b(?!m)/g },
+    { cls: "kw-distance", re: /\b\d+(?:\.\d+)?\s+meters?\b/gi },
+  ];
   function highlightKeywords(text) {
-    return text
-      .replace(/\b(Amplifies|Amplifying|Amplify|Amplified|Amplification)\b/gi, '<span class="kw-amplify">$1</span>')
-      .replace(/\bExotic\b/g, '<span class="kw-exotic">Exotic</span>')
-      .replace(/\bNamed\b/g, '<span class="kw-named">Named</span>')
-      .replace(/\bHigh End\b/g, '<span class="kw-highend">High End</span>')
-      // distances: "7m" / "7 meters" but not "9mm" (ammo caliber)
-      .replace(/\b(\d+(?:\.\d+)?m)(?!m)\b/g, '<span class="kw-distance">$1</span>')
-      .replace(/\b(\d+(?:\.\d+)?\s+meters?)\b/gi, '<span class="kw-distance">$1</span>')
-      .replace(KW_PATTERN, (m) => '<span class="' + KW_MAP.get(m.toLowerCase()) + '">' + m + '</span>');
+    let out = text;
+    PHRASE_PATTERNS.forEach(({ cls, re }) => { out = out.replace(re, (m) => '<span class="' + cls + '">' + m + '</span>'); });
+    return out.replace(KW_PATTERN, (m) => '<span class="' + KW_MAP.get(m.toLowerCase()) + '">' + m + '</span>');
   }
   function compactDesc(text) { return text ? highlightKeywords(text.replace(/(\r?\n){2,}/g, "\n").trim()) : text; }
   function talentBlock(name, desc) {
@@ -800,7 +819,7 @@
     const sortedStandalone = sortByQuality(standaloneTalents, (t) => t.quality, (t) => t.name);
     const setBoxes = progress.filter((p) => p.active.length).map((p) => ({
       brand: p.brand, count: p.count, boosted: p.boosted, isGearset: p.isGearset,
-      bonus: p.active.join(" · "), talents: talentsByBrand[p.brand] || [],
+      bonus: p.active.join("\n"), talents: talentsByBrand[p.brand] || [],
     })).sort((a, b) => (b.isGearset - a.isGearset) || a.brand.localeCompare(b.brand));
 
     let html = "";
@@ -889,14 +908,17 @@
     const iconSrc = Engine.slotTypeIcon(kind, slot.Type);
     const iconHtml = iconSrc ? '<img class="roll-icon' + (field === "core1" ? " roll-icon-lg" : "") + '" src="' + iconSrc + '" alt="">' : "";
     const max = slot.Max != null ? slot.Max : slot.max;
+    // primary (core) and secondary (attribute) rolls are always colored by stat type
+    // (red/blue/yellow), same convention as everywhere else in the app
+    const colorStyle = ' style="color:' + (STAT_TYPE_COLOR[slot.Type] || "var(--text)") + '"';
     let bodyHtml;
     if (field === "attribute1" && slot.selectable) {
       const pool = Engine.weaponAttributePool(null);
-      bodyHtml = '<select class="roll-select" data-roll-field="' + field + '" data-roll-slot="' + weaponKey + '">' +
+      bodyHtml = '<select class="roll-select"' + colorStyle + ' data-roll-field="' + field + '" data-roll-slot="' + weaponKey + '">' +
         pool.map((o, i) => '<option value="' + i + '"' + (o.Stat === slot.Stat ? " selected" : "") + '>' + o.Stat + '</option>').join("") +
         '</select>';
     } else {
-      bodyHtml = '<span class="roll-label-fixed">' + (slot.stat || slot.Stat) + '</span>';
+      bodyHtml = '<span class="roll-label-fixed"' + colorStyle + '>' + (slot.stat || slot.Stat) + '</span>';
     }
     return '<div class="roll-row">' + iconHtml + bodyHtml +
       '<input type="number" class="roll-input" min="0" max="' + max + '" value="' + slot.value + '" data-roll-value="' + field + '" data-roll-slot="' + weaponKey + '"></div>';
@@ -957,21 +979,25 @@
     if (!slot) return "";
     const iconSrc = Engine.slotTypeIcon(kind, slot.Type);
     const iconHtml = iconSrc ? '<img class="roll-icon' + (kind === "core" ? " roll-icon-lg" : "") + '" src="' + iconSrc + '" alt="">' : "";
+    // primary (core) and secondary (attribute) rolls are always colored by stat type
+    // (red/blue/yellow); mods aren't attributes, so they're left uncolored
+    const colorStyle = kind !== "mod" ? ' style="color:' + (STAT_TYPE_COLOR[slot.Type] || "var(--text)") + '"' : "";
     let bodyHtml = "";
     if (kind === "core" && slot.selectable) {
       // Crafted/"Improvised" gear leaves its core type unrolled — the player picks it
-      bodyHtml = '<select class="roll-select" data-roll-field="' + field + '" data-roll-slot="' + gearKey + '">' +
+      bodyHtml = '<select class="roll-select"' + colorStyle + ' data-roll-field="' + field + '" data-roll-slot="' + gearKey + '">' +
         Engine.CORE_ATTRIBUTES.map((o, i) => '<option value="' + i + '"' + (o.label === slot.label ? " selected" : "") + '>' + o.label + '</option>').join("") +
         '</select>';
     } else if (kind === "core") {
-      // fixed by the item — only 3 possible cores, so the icon + its color already say which one this is
+      // fixed by the item (Exotic only) - still label + color it, just no picker
+      bodyHtml = '<span class="roll-label-fixed"' + colorStyle + '>' + slot.label + '</span>';
     } else if (slot.selectable) {
       const pool = kind === "mod" ? modOptionsFor(item, field) : attrOptionsFor(item, field);
-      bodyHtml = '<select class="roll-select" data-roll-field="' + field + '" data-roll-slot="' + gearKey + '">' +
+      bodyHtml = '<select class="roll-select"' + colorStyle + ' data-roll-field="' + field + '" data-roll-slot="' + gearKey + '">' +
         pool.map((o, i) => '<option value="' + i + '"' + (o.Stat === slot.Stat ? " selected" : "") + '>' + o.Stat + '</option>').join("") +
         '</select>';
     } else {
-      bodyHtml = '<span class="roll-label-fixed">' + slot.Stat + '</span>';
+      bodyHtml = '<span class="roll-label-fixed"' + colorStyle + '>' + slot.Stat + '</span>';
     }
     return '<div class="roll-row">' + iconHtml + bodyHtml +
       '<input type="number" class="roll-input" min="0" max="' + slot.Max + '" value="' + slot.value + '" data-roll-value="' + field + '" data-roll-slot="' + gearKey + '"></div>';
@@ -1097,7 +1123,7 @@
     if (g.modTwo) attrs.push('<span class="mod-slot-tag">' + img("ui", "blank_mod.png", "mod-slot-icon") + 'Has 2nd Mod Slot</span>');
     const tiers = brandTierSummary(g.brand);
     const tierHtml = tiers.length
-      ? '<span class="pi-tiers ' + (g.quality === "Gearset" ? "is-gearset" : "is-brand") + '">' + tiers.join(" · ") + '</span>'
+      ? '<span class="pi-tiers ' + (g.quality === "Gearset" ? "is-gearset" : "is-brand") + '">' + tiers.map((t) => compactDesc(t)).join("<br>") + '</span>'
       : "";
     return '<span class="piname">' + g.name + '</span>' +
       '<span class="piquality"><span class="qtag q-' + qClass(g.quality) + '">' + g.quality + '</span></span>' +
@@ -1144,6 +1170,7 @@
     draw("");
     searchEl.oninput = () => draw(searchEl.value);
     dialog.showModal();
+    listEl.scrollTop = 0;
   }
 
   function openWeaponPicker(slotKey) {
