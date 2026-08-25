@@ -9,7 +9,7 @@
     --text: #ece9df; --muted: #948f78; --accent: #f2711c; --accent-dim: #4a2a0d;
     --red: #cf3f2e; --blue: #3a86c8; --yellow: #e0b62f; --purple: #c084fc; --cyan: #22d3ee; --green: #4ade80; --amber: #f59e0b; --indigo: #818cf8;
     --q-exotic: #d9432e; --q-named: #e3a73b; --q-gearset: #2fa89c; --q-highend: #e3a73b; --q-named-text: #e85dae;
-    --kw-exotic: #f2711c; --kw-named: #e85dae; --kw-highend: #e0b62f; --kw-amplify: #9dff1f;
+    --kw-exotic: #f2711c; --kw-named: #e85dae; --kw-highend: #e0b62f; --kw-amplify: #9dff1f; --kw-overcharge: #ff2ec4;
     --font-display: "Oswald", "Arial Narrow", sans-serif;
     --font-body: "Barlow", "Segoe UI", sans-serif;
     --font-mono: "IBM Plex Mono", "Consolas", monospace;
@@ -18,13 +18,13 @@
     :root:not([data-theme="dark"]):not([data-theme="light"]) {
       --bg: #eeece3; --panel: #ffffff; --panel-2: #f5f3e9; --line: #d8d4bf;
       --text: #201e15; --muted: #6b6752; --accent: #c05a12; --accent-dim: #f4ddc6;
-      --kw-amplify: #5a8f00; --purple: #8b5cf6; --cyan: #0e7490; --green: #15803d; --amber: #b45309; --indigo: #4338ca;
+      --kw-amplify: #5a8f00; --purple: #8b5cf6; --cyan: #0e7490; --green: #15803d; --amber: #b45309; --indigo: #4338ca; --kw-overcharge: #a3157f;
     }
   }
   :root[data-theme="light"] {
     --bg: #eeece3; --panel: #ffffff; --panel-2: #f5f3e9; --line: #d8d4bf;
     --text: #201e15; --muted: #6b6752; --accent: #c05a12; --accent-dim: #f4ddc6;
-    --kw-amplify: #5a8f00;
+    --kw-amplify: #5a8f00; --kw-overcharge: #a3157f;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font-body); }
@@ -207,6 +207,13 @@
   .item-tile .tile-name { font-family: var(--font-body); font-weight: 600; font-size: 14px; margin-top: 2px; line-height: 1.25; }
   .item-tile .tile-name.placeholder { color: var(--muted); font-weight: 400; font-style: italic; }
   .item-tile .tile-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .gear-exp-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-family: var(--font-mono); font-size: 11px; }
+  .gear-exp-armor { color: var(--blue); font-weight: 600; }
+  .gear-exp-field { color: var(--muted); display: flex; align-items: center; gap: 4px; letter-spacing: .04em; }
+  .gear-exp-input {
+    width: 38px; background: var(--panel); border: 1px solid var(--line); color: var(--text);
+    font-family: var(--font-mono); font-size: 11px; padding: 2px 4px; text-align: right;
+  }
   .item-tile.q-Exotic { box-shadow: inset 0 2px 0 var(--q-exotic); }
   .item-tile.q-Named { box-shadow: inset 0 2px 0 var(--q-named); }
   .item-tile.q-Gearset { box-shadow: inset 0 2px 0 var(--q-gearset); }
@@ -263,6 +270,7 @@
   .kw-named { color: var(--kw-named); font-weight: 600; }
   .kw-highend { color: var(--kw-highend); font-weight: 600; }
   .kw-amplify { color: var(--kw-amplify); font-weight: 700; }
+  .kw-overcharge { color: var(--kw-overcharge); font-weight: 700; }
   .kw-damage { color: var(--red); font-weight: 600; }
   .kw-utility { color: var(--yellow); font-weight: 600; }
   .kw-defense { color: var(--blue); font-weight: 600; }
@@ -500,8 +508,8 @@
     try { localStorage.setItem("shd-watch-levels", JSON.stringify(state.shd.map((l) => l.value))); } catch (e) { /* storage may be unavailable */ }
   }
 
-  // one shared expertise level (0-30) stands in for every weapon and gear piece's individual
-  // expertise, for simplicity, rather than tracking it per item.
+  // one shared expertise level (0-30) stands in for every weapon's individual expertise, and
+  // is the default for every gear piece's own expertise (gear pieces can override it below).
   function loadExpertise() {
     try {
       const raw = localStorage.getItem("expertise-level");
@@ -515,13 +523,30 @@
   function saveExpertise() {
     try { localStorage.setItem("expertise-level", String(state.expertise)); } catch (e) { /* storage may be unavailable */ }
   }
+  // per-piece expertise overrides (slot -> level). A slot with no entry here just uses the
+  // shared expertise level above. Stepping the shared level (up/down arrows or typing into
+  // that box) wipes every override - see setExpertise().
+  function loadGearExpertise() {
+    try {
+      const raw = localStorage.getItem("gear-expertise-overrides");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") return parsed;
+      }
+    } catch (e) { /* ignore corrupt storage */ }
+    return {};
+  }
+  function saveGearExpertise() {
+    try { localStorage.setItem("gear-expertise-overrides", JSON.stringify(state.gearExpertise)); } catch (e) { /* storage may be unavailable */ }
+  }
 
-  const state = { weapons: {}, gear: {}, skills: {}, spec: null, shd: loadSHD(), expertise: loadExpertise() };
+  const state = { weapons: {}, gear: {}, skills: {}, spec: null, shd: loadSHD(), expertise: loadExpertise(), gearExpertise: loadGearExpertise() };
   let summaryOpen = false;
   let attachExpanded = {}; // weapon slot key -> bool, session-only UI state
 
   function img(kind, file, cls) { const src = Engine.iconSrc(kind, file); return src ? '<img class="' + (cls || "") + '" src="' + src + '" alt="">' : ""; }
   function qClass(quality) { return quality ? quality.replace(/\s+/g, "") : ""; }
+  function stripHtml(html) { return html.replace(/<[^>]*>/g, " "); }
   function fmt(n) { return Math.round(n).toLocaleString(); }
 
   // Exotic > Gear Set > Named > everything else (High-End), then alphabetical within each tier
@@ -582,6 +607,7 @@
     // reuses kw-distance's orange - these aren't distances, the user just wants the same color
     { cls: "kw-distance", words: ["Skills", "Skill", "Allies", "Ally", "Weakpoints", "Weakpoint", "Signature Weapon"] },
     { cls: "kw-amplify", words: ["Amplifies", "Amplifying", "Amplify", "Amplified", "Amplification", "from all sources"] },
+    { cls: "kw-overcharge", words: ["Overcharged", "Overcharging", "Overcharges", "Overcharge"] },
     { cls: "kw-exotic", words: ["Exotic"] },
     { cls: "kw-named", words: ["Named"] },
     { cls: "kw-highend", words: ["High End"] },
@@ -621,7 +647,7 @@
   }
 
   function computeCurrent(shdOverride) {
-    return Engine.computeLoadout({ weapons: state.weapons, gear: state.gear, specialization: state.spec ? { name: state.spec } : null, skills: state.skills, shd: shdOverride !== undefined ? shdOverride : state.shd, expertiseLevel: state.expertise });
+    return Engine.computeLoadout({ weapons: state.weapons, gear: state.gear, specialization: state.spec ? { name: state.spec } : null, skills: state.skills, shd: shdOverride !== undefined ? shdOverride : state.shd, expertiseLevel: state.expertise, gearExpertise: state.gearExpertise });
   }
 
   // =================== INVENTORY: compact expandable stat summary ===================
@@ -1022,6 +1048,17 @@
     return '<div class="roll-rows">' + rows + '</div>';
   }
 
+  // this piece's own share of base armor (Base + Expertise only - no attributes/cores, those
+  // already show up in the roll rows and the Total Armor % strip separately)
+  function gearExpertiseRowHtml(slotKey) {
+    const lvl = state.gearExpertise[slotKey] != null ? state.gearExpertise[slotKey] : state.expertise;
+    const armor = Engine.gearPieceArmor(lvl);
+    return '<div class="gear-exp-row">' +
+      '<span class="gear-exp-armor">+' + armor.toLocaleString() + ' Armor</span>' +
+      '<span class="gear-exp-field">EXP <input type="number" class="gear-exp-input" min="0" max="30" value="' + lvl + '" data-gear-exp="' + slotKey + '"></span>' +
+    '</div>';
+  }
+
   function renderGearGrid() {
     const el = document.getElementById("gearGrid");
     el.innerHTML = GEAR_SLOTS.map((s) => {
@@ -1039,13 +1076,21 @@
           (item ? '<span class="tile-subtype">' + item.brand + '</span>' : "") +
           (item ? '<span class="qtag q-' + qClass(item.quality) + '">' + item.quality + '</span>' : "") +
         '</div>' +
+        (item ? gearExpertiseRowHtml(s.key) : "") +
         (item ? rollRowsHtml(item, s.key) : "") + talentHtml +
         '</div>';
     }).join("");
     el.querySelectorAll("[data-gear-slot]").forEach((elm) => elm.addEventListener("click", () => openGearPicker(elm.dataset.gearSlot)));
-    el.querySelectorAll(".roll-select, .roll-input").forEach((elm) => elm.addEventListener("click", (e) => e.stopPropagation()));
+    el.querySelectorAll(".roll-select, .roll-input, .gear-exp-row").forEach((elm) => elm.addEventListener("click", (e) => e.stopPropagation()));
+    el.querySelectorAll(".gear-exp-input").forEach((inp) => inp.addEventListener("change", () => setGearExpertise(inp.dataset.gearExp, Number(inp.value))));
     el.querySelectorAll("[data-pick-gear-talent]").forEach((elm) => elm.addEventListener("click", (e) => { e.stopPropagation(); openGearTalentPicker(elm.dataset.pickGearTalent); }));
-    el.querySelectorAll("[data-unequip-gear]").forEach((elm) => elm.addEventListener("click", (e) => { e.stopPropagation(); state.gear[elm.dataset.unequipGear] = null; renderInventory(); }));
+    el.querySelectorAll("[data-unequip-gear]").forEach((elm) => elm.addEventListener("click", (e) => {
+      e.stopPropagation();
+      state.gear[elm.dataset.unequipGear] = null;
+      delete state.gearExpertise[elm.dataset.unequipGear];
+      saveGearExpertise();
+      renderInventory();
+    }));
     el.querySelectorAll(".roll-select").forEach((sel) => sel.addEventListener("change", (e) => {
       const field = sel.dataset.rollField, gearKey = sel.dataset.rollSlot;
       const item = state.gear[gearKey];
@@ -1154,13 +1199,24 @@
     searchEl.value = "";
     let activeCat = null;
 
+    // search everything a card COULD tell you, not just the raw CSV columns and not just
+    // what that particular card happens to render - resolve every item once up front and
+    // index its rendered card text (name/quality/type/talent/mods/etc, all already assembled
+    // by rowHtmlFn) plus, for gear, the full brand/gearset tier list (1pc..6pc) even though a
+    // single piece's card only ever shows its own tiers-reached-so-far preview.
+    const corpusByItem = new Map(rawItems.map((it) => {
+      const resolved = resolveFn(it);
+      const extra = resolved.brand ? brandTierSummary(resolved.brand).join(" ") : "";
+      return [it, (stripHtml(rowHtmlFn(resolved)) + " " + extra + " " + JSON.stringify(it)).toLowerCase()];
+    }));
+
     function currentItems() {
       return activeCat ? rawItems.filter((it) => opts.categorize(it) === activeCat) : rawItems;
     }
     function draw(filter) {
       const f = filter.toLowerCase();
       const base = currentItems();
-      const filtered = f ? base.filter((it) => JSON.stringify(it).toLowerCase().includes(f)) : base;
+      const filtered = f ? base.filter((it) => corpusByItem.get(it).includes(f)) : base;
       const resolved = filtered.slice(0, 150).map(resolveFn);
       listEl.innerHTML = resolved.length ? resolved.map((it, i) => '<div class="pitem' + (it.quality ? " q-" + qClass(it.quality) : "") + '" data-i="' + i + '">' + rowHtmlFn(it) + '</div>').join("") : '<div class="empty-note">No matches.</div>';
       listEl.querySelectorAll(".pitem").forEach((elm) => {
@@ -1202,7 +1258,11 @@
   function openGearPicker(slot) {
     let pool = DATA.gear[slot];
     if (hasExoticGearElsewhere(slot)) pool = pool.filter((g) => g.Quality !== "Exotic");
-    openPicker("Select " + slot, sortByQuality(pool, (g) => g.Quality, (g) => g["Item Name"]), Engine.resolveGear, gearRowHtml, (g) => { state.gear[slot] = g; });
+    openPicker("Select " + slot, sortByQuality(pool, (g) => g.Quality, (g) => g["Item Name"]), Engine.resolveGear, gearRowHtml, (g) => {
+      state.gear[slot] = g;
+      delete state.gearExpertise[slot];
+      saveGearExpertise();
+    });
   }
   function openSkillPicker(n) {
     const items = [...DATA.skills].sort((a, b) => a["Item Name"].localeCompare(b["Item Name"]) || a.Variant.localeCompare(b.Variant));
@@ -1232,17 +1292,27 @@
       (t) => talentPickerRow(t.Talent, t.Desc),
       (t) => { state.gear[slot].talent = t; state.gear[slot].talentAssumed = false; });
   }
-  document.getElementById("clearBtn").addEventListener("click", () => { state.weapons = {}; state.gear = {}; state.skills = {}; state.spec = null; renderInventory(); });
+  document.getElementById("clearBtn").addEventListener("click", () => { state.weapons = {}; state.gear = {}; state.skills = {}; state.spec = null; state.gearExpertise = {}; saveGearExpertise(); renderInventory(); });
 
+  // changing the shared level always wins over any per-piece override, on the theory that
+  // touching this control means "set everything to this" - see loadGearExpertise() above.
   function setExpertise(v) {
     if (isNaN(v)) v = 30;
     state.expertise = Math.max(0, Math.min(30, v));
+    state.gearExpertise = {};
     saveExpertise();
+    saveGearExpertise();
     renderInventory();
   }
   document.getElementById("expertiseInput").addEventListener("change", (e) => setExpertise(Number(e.target.value)));
   document.getElementById("expertiseDown").addEventListener("click", () => setExpertise(state.expertise - 1));
   document.getElementById("expertiseUp").addEventListener("click", () => setExpertise(state.expertise + 1));
+  function setGearExpertise(slot, v) {
+    if (isNaN(v)) v = state.expertise;
+    state.gearExpertise[slot] = Math.max(0, Math.min(30, v));
+    saveGearExpertise();
+    renderInventory();
+  }
 
   // SHD Watch quick toggle — flips all 16 levels to max or to 0 at once; fine-tuning
   // individual levels still lives on the SHD Watch tab.
@@ -1467,12 +1537,13 @@
     const shdNonzero = state.shd.map((l, i) => (l.value ? [i, l.value] : null)).filter(Boolean);
     if (shdNonzero.length) out.shd = shdNonzero;
     if (state.expertise !== 30) out.exp = state.expertise;
+    if (Object.keys(state.gearExpertise).length) out.gexp = state.gearExpertise;
     return out;
   }
   function updateUrl() {
     try {
       const data = serializeState();
-      const hasAny = Object.keys(data.w).length || Object.keys(data.g).length || Object.keys(data.sk).length || data.sp || (data.shd && data.shd.length) || data.exp != null;
+      const hasAny = Object.keys(data.w).length || Object.keys(data.g).length || Object.keys(data.sk).length || data.sp || (data.shd && data.shd.length) || data.exp != null || data.gexp;
       const hash = hasAny ? "#b=" + encodeURIComponent(JSON.stringify(data)) : "";
       history.replaceState(null, "", location.pathname + location.search + hash);
     } catch (e) { /* URL persistence is a convenience, never block the app on it */ }
@@ -1555,6 +1626,10 @@
     if (data.sp) state.spec = data.sp;
     if (data.shd) data.shd.forEach(([i, v]) => { if (state.shd[i]) state.shd[i].value = Math.max(0, Math.min(state.shd[i].max, v)); });
     if (data.exp != null) state.expertise = Math.max(0, Math.min(30, Number(data.exp)));
+    if (data.gexp) {
+      state.gearExpertise = {};
+      Object.entries(data.gexp).forEach(([slot, v]) => { state.gearExpertise[slot] = Math.max(0, Math.min(30, Number(v))); });
+    }
   }
 
   restoreFromUrl();

@@ -10,6 +10,18 @@ window.Engine = (function () {
 		{ label: "Armor", Max: 170000, Type: "D" },
 	];
 	const STAT_TYPE_LABEL = { O: "Offensive", D: "Defensive", U: "Utility" };
+	// 660014 is the base armor value for a max-level (40) agent, matching the original app -
+	// every piece of gear you wear contributes to this baseline in the real game, it isn't
+	// something this per-item dataset tracks separately, so it's a flat constant here too,
+	// split evenly across the 6 gear slots for expertise purposes.
+	const BASE_ARMOR_LVL40 = 660014;
+	const TOTAL_GEAR_SLOTS = 6;
+	const PER_PIECE_BASE_ARMOR = BASE_ARMOR_LVL40 / TOTAL_GEAR_SLOTS;
+	// a single equipped piece's own base armor at a given expertise level (1% per level, on
+	// that piece's own share only - not the player's innate base, not any core/attribute)
+	function gearPieceArmor(expertiseLevel) {
+		return Math.round(PER_PIECE_BASE_ARMOR * (1 + Number(expertiseLevel || 0) / 100));
+	}
 	const ICON_BY_TYPE = {
 		core: { O: "offense1.png", U: "tech1.png", D: "defense1.png" },
 		attribute: { O: "offense2.png", U: "tech2.png", D: "defense2.png", B: "blank_attribute.png" },
@@ -344,17 +356,16 @@ window.Engine = (function () {
 				SideArm: weaponStatsFor(loadout.weapons && loadout.weapons.SideArm),
 			};
 
-			// 660014 is the base armor value for a max-level (40) agent, matching the original app -
-			// every piece of gear you wear contributes to this baseline in the real game, it isn't
-			// something this per-item dataset tracks separately, so it's a flat constant here too,
-			// split evenly across the 6 gear slots for expertise purposes.
 			// Gear expertise increases each EQUIPPED piece's own base armor (not any attribute or
 			// core, and not the player's innate base) by 1% per level - so with nothing equipped,
-			// expertise contributes nothing; it only scales the share of pieces actually worn.
-			const BASE_ARMOR_LVL40 = 660014;
-			const TOTAL_GEAR_SLOTS = 6;
-			const perPieceBaseArmor = BASE_ARMOR_LVL40 / TOTAL_GEAR_SLOTS;
-			const expertiseBaseArmor = BASE_ARMOR_LVL40 + gearList.length * perPieceBaseArmor * (expertiseLevel / 100);
+			// expertise contributes nothing; it only scales the share of pieces actually worn. Each
+			// piece can carry its own expertise level (loadout.gearExpertise, keyed by slot); a slot
+			// with no override falls back to the shared expertiseLevel.
+			const gearExpertiseMap = loadout.gearExpertise || {};
+			const expertiseBaseArmor = Object.entries(loadout.gear || {}).filter(([, g]) => g).reduce((sum, [key]) => {
+				const lvl = gearExpertiseMap[key] != null ? Number(gearExpertiseMap[key]) : expertiseLevel;
+				return sum + gearPieceArmor(lvl);
+			}, BASE_ARMOR_LVL40);
 			const totals = {
 				armor: Math.round((expertiseBaseArmor + stats.Cores.Defensive.reduce((a, b) => a + b, 0)) * (1 + (stats.Defensive["Total Armor"] || 0) / 100)),
 				health: stats.Defensive["Health"] || 0,
@@ -411,7 +422,7 @@ window.Engine = (function () {
 
 		return {
 			resolveGear, resolveWeapon, resolveSkill, computeLoadout, brandProgress, iconSrc, uiIcon, slotTypeIcon, sourceHint,
-			CORE_ATTRIBUTES, modPool, defaultSHDLevels, SHD_LEVELS_DEF,
+			CORE_ATTRIBUTES, modPool, defaultSHDLevels, SHD_LEVELS_DEF, gearPieceArmor,
 			attributePool: (excludeStat) => attributePool(DATA.gearAttributes, excludeStat),
 			weaponAttributePool: (excludeStat) => attributePool(DATA.weaponAttributes, excludeStat),
 			weaponModPool,
