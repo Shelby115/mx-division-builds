@@ -7,7 +7,7 @@
   :root {
     --bg: #0a0a09; --panel: #14140f; --panel-2: #1c1c15; --line: #33321f;
     --text: #ece9df; --muted: #948f78; --accent: #f2711c; --accent-dim: #4a2a0d;
-    --red: #cf3f2e; --blue: #3a86c8; --yellow: #e0b62f; --purple: #c084fc;
+    --red: #cf3f2e; --blue: #3a86c8; --yellow: #e0b62f; --purple: #c084fc; --cyan: #22d3ee; --green: #4ade80; --amber: #f59e0b;
     --q-exotic: #d9432e; --q-named: #e3a73b; --q-gearset: #2fa89c; --q-highend: #e3a73b; --q-named-text: #e85dae;
     --kw-exotic: #f2711c; --kw-named: #e85dae; --kw-highend: #e0b62f; --kw-amplify: #9dff1f;
     --font-display: "Oswald", "Arial Narrow", sans-serif;
@@ -18,7 +18,7 @@
     :root:not([data-theme="dark"]):not([data-theme="light"]) {
       --bg: #eeece3; --panel: #ffffff; --panel-2: #f5f3e9; --line: #d8d4bf;
       --text: #201e15; --muted: #6b6752; --accent: #c05a12; --accent-dim: #f4ddc6;
-      --kw-amplify: #5a8f00; --purple: #8b5cf6;
+      --kw-amplify: #5a8f00; --purple: #8b5cf6; --cyan: #0e7490; --green: #15803d; --amber: #b45309;
     }
   }
   :root[data-theme="light"] {
@@ -260,6 +260,9 @@
   .kw-utility { color: var(--yellow); font-weight: 600; }
   .kw-defense { color: var(--blue); font-weight: 600; }
   .kw-condition { color: var(--purple); font-weight: 600; }
+  .kw-common-condition { color: var(--cyan); font-weight: 600; }
+  .kw-skill { color: var(--green); font-weight: 600; }
+  .kw-explosive { color: var(--amber); font-weight: 600; }
   .kw-distance { color: var(--accent); font-weight: 600; }
 
   /* ---------- SHD WATCH ---------- */
@@ -534,16 +537,33 @@
   const KW_DAMAGE = ["Weapon Damage", "Assault Rifle Damage", "LMG Damage", "Marksman Rifle Damage", "Pistol Damage", "Rifle Damage", "Shotgun Damage", "SMG Damage",
     "Critical Hit Chance", "Critical Hit Damage", "Headshot Damage", "Damage to Armor", "Damage to TOC", "Damage to Health", "Health Damage", "Damage to Electronics", "Explosive Damage"];
   const KW_UTILITY = ["Reload Speed", "Stability", "Accuracy", "Magazine Size", "Weapon Handling", "Rate of Fire",
-    "Optimal Range", "Swap Speed", "Ammo Capacity", "Extra Rounds", "Skill Haste", "Skill Damage", "Skill Duration", "Repair Skills", "Skill Tier", "Skill Efficiency", "Skill Health", "Status Effects"];
+    "Optimal Range", "Swap Speed", "Ammo Capacity", "Extra Rounds", "Skill Haste", "Skill Damage", "Skill Duration", "Repair Skills", "Skill Tier", "Skill Efficiency", "Skill Health", "Status Effects", "Status Effect"];
   const KW_DEFENSE = ["Total Armor", "Armor Regeneration", "Health", "Hazard Protection", "Explosive Resistance",
-    "Incoming Repairs", "Protection from Elites", "Armor on Kill"];
+    "Incoming Repairs", "Protection from Elites", "Armor on Kill", "Repairs", "Repair"];
+  // status effects proper - the debuffs with a dedicated Resistance stat, plus every inflected
+  // form (-ed/-ing/-s) actually likely to appear in talent prose, not just the base word
   const KW_CONDITION = ["Bleed Resistance", "Burn Resistance", "Shock Resistance", "Disrupt Resistance", "Disorient Resistance", "Ensnare Resistance", "Pulse Resistance", "Blind/Deaf Resistance",
-    "Bleed", "Burn", "Shock", "Disrupt", "Disorient", "Ensnare", "Blind", "Deaf", "Confuse", "Confused", "Suppressed", "Suppression"];
+    "Bleed", "Bleeding", "Bleeds", "Bled",
+    "Burn", "Burned", "Burning", "Burns",
+    "Shock", "Shocked", "Shocking", "Shocks",
+    "Disrupt", "Disrupted", "Disrupting", "Disrupts",
+    "Disorient", "Disoriented", "Disorienting", "Disorients",
+    "Ensnare", "Ensnared", "Ensnaring", "Ensnares",
+    "Blind", "Blinded", "Blinding", "Blinds",
+    "Deaf", "Deafened",
+    "Confuse", "Confused", "Confusing", "Confuses"];
+  // common battlefield states that aren't resistance-gated status effects (Suppressed isn't
+  // resisted like Bleed/Burn are; Pulse here means "revealed by a Pulse", not Pulse Resistance)
+  const KW_COMMON_CONDITION = ["Suppressed", "Suppression", "Suppressing", "Suppresses",
+    "Pulsed", "Pulsing", "Pulses", "Pulse"];
+  // skill names - "Ballistic Shield" is often just called "Shield" in talent text
+  const KW_SKILL = ["Sticky Bomb", "Ballistic Shield", "Shield", "Chem Launcher", "Seeker Mine", "Smart Cover", "Trap", "Decoy", "Turret", "Hive", "Firefly", "Drone"];
+  const KW_EXPLOSIVE = ["Grenade", "Grenades", "Explosion", "Explosions", "Explosive", "Explosives", "Explode", "Exploded", "Exploding", "Explodes"];
   // one combined map + single regex pass (longest phrase first) rather than one pass per
   // category - running separate passes let a short word like "Health" re-match text a longer
   // phrase ("Skill Health") had already wrapped in the previous pass, nesting spans.
   const KW_MAP = new Map();
-  [[KW_DAMAGE, "kw-damage"], [KW_UTILITY, "kw-utility"], [KW_DEFENSE, "kw-defense"], [KW_CONDITION, "kw-condition"]].forEach(([list, cls]) => {
+  [[KW_DAMAGE, "kw-damage"], [KW_UTILITY, "kw-utility"], [KW_DEFENSE, "kw-defense"], [KW_CONDITION, "kw-condition"], [KW_COMMON_CONDITION, "kw-common-condition"], [KW_SKILL, "kw-skill"], [KW_EXPLOSIVE, "kw-explosive"]].forEach(([list, cls]) => {
     list.forEach((w) => KW_MAP.set(w.toLowerCase(), cls));
   });
   const KW_PATTERN = new RegExp(
@@ -552,7 +572,7 @@
   );
   function highlightKeywords(text) {
     return text
-      .replace(/\b(Amplifies|Amplify|Amplified|Amplification)\b/g, '<span class="kw-amplify">$1</span>')
+      .replace(/\b(Amplifies|Amplifying|Amplify|Amplified|Amplification)\b/gi, '<span class="kw-amplify">$1</span>')
       .replace(/\bExotic\b/g, '<span class="kw-exotic">Exotic</span>')
       .replace(/\bNamed\b/g, '<span class="kw-named">Named</span>')
       .replace(/\bHigh End\b/g, '<span class="kw-highend">High End</span>')
@@ -1141,8 +1161,9 @@
     openPicker("Select " + slot, sortByQuality(pool, (g) => g.Quality, (g) => g["Item Name"]), Engine.resolveGear, gearRowHtml, (g) => { state.gear[slot] = g; });
   }
   function openSkillPicker(n) {
-    openPicker("Select Skill", DATA.skills, Engine.resolveSkill,
-      (s) => '<span class="piname">' + s.name + '</span><span class="piquality">' + s.variant + '</span>' + (s.desc ? '<span class="piattrs">' + s.desc.slice(0, 90) + '…</span>' : ""),
+    const items = [...DATA.skills].sort((a, b) => a["Item Name"].localeCompare(b["Item Name"]) || a.Variant.localeCompare(b.Variant));
+    openPicker("Select Skill", items, Engine.resolveSkill,
+      (s) => '<span class="piname">' + s.name + ' (' + s.variant + ')</span><span class="piquality"></span>' + (s.desc ? '<span class="piattrs">' + s.desc.slice(0, 90) + '…</span>' : ""),
       (s) => { state.skills[n] = s; });
   }
   function openSpecPicker() {
