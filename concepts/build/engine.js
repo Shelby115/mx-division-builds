@@ -294,11 +294,15 @@ window.Engine = (function () {
 
 			// 660014 is the base armor value for a max-level (40) agent, matching the original app -
 			// every piece of gear you wear contributes to this baseline in the real game, it isn't
-			// something this per-item dataset tracks separately, so it's a flat constant here too.
-			// Gear expertise increases each piece's own base armor (not any attribute or core) by
-			// 1% per level - modeled here as the same flat 1%/level applied to the whole constant.
+			// something this per-item dataset tracks separately, so it's a flat constant here too,
+			// split evenly across the 6 gear slots for expertise purposes.
+			// Gear expertise increases each EQUIPPED piece's own base armor (not any attribute or
+			// core, and not the player's innate base) by 1% per level - so with nothing equipped,
+			// expertise contributes nothing; it only scales the share of pieces actually worn.
 			const BASE_ARMOR_LVL40 = 660014;
-			const expertiseBaseArmor = BASE_ARMOR_LVL40 * (1 + expertiseLevel / 100);
+			const TOTAL_GEAR_SLOTS = 6;
+			const perPieceBaseArmor = BASE_ARMOR_LVL40 / TOTAL_GEAR_SLOTS;
+			const expertiseBaseArmor = BASE_ARMOR_LVL40 + gearList.length * perPieceBaseArmor * (expertiseLevel / 100);
 			const totals = {
 				armor: Math.round((expertiseBaseArmor + stats.Cores.Defensive.reduce((a, b) => a + b, 0)) * (1 + (stats.Defensive["Total Armor"] || 0) / 100)),
 				health: stats.Defensive["Health"] || 0,
