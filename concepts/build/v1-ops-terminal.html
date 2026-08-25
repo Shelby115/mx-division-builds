@@ -230,6 +230,7 @@
 
   /* inline roll editors (core / attribute / mod value + identity overrides) */
   .roll-rows { padding: 8px 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 5px; }
+  .roll-rows[hidden] { display: none; }
   .roll-row { display: flex; align-items: center; gap: 6px; font-size: 11.5px; }
   .roll-row .roll-select, .roll-row .attach-select { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); color: var(--text); font-family: var(--font-mono); font-size: 11px; padding: 3px 4px; }
   .attach-block { border-top: 1px solid var(--line); }
@@ -321,6 +322,9 @@
   .pitem .piattrs .mod-slot-tag { display: inline-flex; align-items: center; gap: 4px; }
   .pitem .piattrs .mod-slot-icon { width: 13px; height: 13px; opacity: .85; }
   .pitem .pitalent { grid-column: 1 / -1; font-size: 12.5px; }
+  .pitem .pi-tiers { grid-column: 1 / -1; font-size: 11.5px; font-family: var(--font-mono); }
+  .pitem .pi-tiers.is-gearset { color: var(--q-gearset); }
+  .pitem .pi-tiers.is-brand { color: var(--q-highend); }
   .pitem .pitalent .tt-name { font-weight: 600; color: var(--accent); }
   .pitem .pitalent .tt-desc { color: var(--muted); margin-top: 3px; line-height: 1.4; white-space: pre-line; }
   .empty-note { padding: 30px 18px; text-align: center; color: var(--muted); font-size: 13.5px; }
@@ -436,10 +440,12 @@
   const DATA = JSON.parse(document.getElementById("app-data").textContent);
   const Engine = window.Engine.init(DATA);
 
+  // Slot "P" = primary-capable weapons, "S" = sidearms (pistols) - Primary/Secondary and
+  // Sidearm are mutually exclusive pools, never cross-equippable.
   const WEAPON_SLOTS = [
-    { key: "Primary", label: "Primary", filter: null, icon: "main-weapon.png" },
-    { key: "Secondary", label: "Secondary", filter: null, icon: "main-weapon.png" },
-    { key: "SideArm", label: "Sidearm", filter: "S", icon: "sidearm.png" },
+    { key: "Primary", label: "Primary", slot: "P", icon: "main-weapon.png" },
+    { key: "Secondary", label: "Secondary", slot: "P", icon: "main-weapon.png" },
+    { key: "SideArm", label: "Sidearm", slot: "S", icon: "sidearm.png" },
   ];
   const GEAR_SLOTS = [
     { key: "Mask", icon: "mask.png" }, { key: "Backpack", icon: "backpack.png" },
@@ -656,23 +662,53 @@
 
   // =================== INVENTORY: gear core/attribute tally (Nx Weapon Damage, Nx Crit Chance, ...) ===================
   const STAT_TYPE_COLOR = { O: "var(--red)", D: "var(--blue)", U: "var(--yellow)" };
+  const STAT_TYPE_RANK = { O: 0, D: 1, U: 2 };
+  const WEAPON_TYPE_DAMAGE_STATS = ["Assault Rifle Damage", "LMG Damage", "Marksman Rifle Damage", "Pistol Damage", "Rifle Damage", "Shotgun Damage", "SMG Damage"];
+  // most stats are percentages, but a handful are flat point values (distinct from their %
+  // counterparts where one exists, e.g. "Armor Regeneration" vs "Armor Regeneration %")
+  const FLAT_STATS = new Set(["Health", "Armor Regeneration", "Armor on Kill", "Skill Tier"]);
+  function fmtPct(v) { return (v >= 0 ? "+" : "") + Math.round(v) + "%"; }
+  function fmtStat(name, v) { return (v > 0 ? "+" : "") + Math.round(v * 10) / 10 + (FLAT_STATS.has(name) ? "" : "%"); }
+  // Primary = the three core stats (Weapon Damage / Skill Tier / Total Armor), each shown as
+  // its FULL computed total - gear cores, the equipped weapon's own attributes, brand/gearset
+  // bonuses (including weapon-type-specific ones like "+10% LMG Damage"), specialization, SHD.
+  // Secondary = Critical Hit Chance/Damage (same "from everything" total) plus every other
+  // stat the build has a bonus in, sorted red (Offensive) -> blue (Defensive) -> yellow (Utility).
   function renderAttributeStrip() {
-    const primary = {}, secondary = {};
-    const bump = (map, name, type) => { if (!name) return; map[name] = map[name] || { count: 0, type }; map[name].count++; };
-    GEAR_SLOTS.forEach((s) => {
-      const g = state.gear[s.key];
-      if (!g) return;
-      [g.core, g.coreTwo, g.coreThree].forEach((c) => bump(primary, c && c.label, c && c.Type));
-      [g.attribute1, g.attribute2, g.attribute3].forEach((a) => bump(secondary, a && a.Stat, a && a.Type));
+    const result = computeCurrent();
+    const p = result.weaponStats.Primary;
+
+    const primary = [];
+    if (p) primary.push(["Weapon Damage", fmtPct(p.totalPct), "O"]);
+    else {
+      const awd = result.stats.Cores.Offensive.reduce((a, b) => a + b, 0);
+      if (awd) primary.push(["Weapon Damage", fmtPct(awd), "O"]);
+    }
+    if (result.totals.skillTier) primary.push(["Skill Tier", String(result.totals.skillTier), "U"]);
+    const totalArmorPct = result.stats.Defensive["Total Armor"] || 0;
+    if (totalArmorPct) primary.push(["Total Armor", fmtPct(totalArmorPct), "D"]);
+
+    const secondary = [];
+    const exclude = new Set(["Weapon Damage", "Total Armor", "Skill Tier", ...WEAPON_TYPE_DAMAGE_STATS]);
+    if (p) {
+      secondary.push(["Critical Hit Chance", fmtPct(p.chc), "O"]);
+      secondary.push(["Critical Hit Damage", fmtPct(p.chd), "O"]);
+      exclude.add("Critical Hit Chance");
+      exclude.add("Critical Hit Damage");
+    }
+    [["Offensive", "O"], ["Defensive", "D"], ["Utility", "U"]].forEach(([cat, code]) => {
+      Object.entries(result.stats[cat]).forEach(([k, v]) => {
+        if (exclude.has(k) || !v) return;
+        secondary.push([k, fmtStat(k, v), code]);
+      });
     });
-    const sorted = (map) => Object.entries(map).sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]));
-    const itemHtml = ([name, info]) => '<span class="qs-item" style="color:' + (STAT_TYPE_COLOR[info.type] || "var(--text)") + '">' + info.count + '×' + name + '</span>';
-    // Primary (core) attributes first, then secondary - each colored by stat type
-    // (red = Offensive, blue = Defensive, yellow = Utility), matching the core icons elsewhere.
-    const items = [...sorted(primary).map(itemHtml), ...sorted(secondary).map(itemHtml)];
+    secondary.sort((a, b) => STAT_TYPE_RANK[a[2]] - STAT_TYPE_RANK[b[2]] || a[0].localeCompare(b[0]));
+
+    const rowHtml = ([name, amount, code]) => '<span class="qs-item" style="color:' + STAT_TYPE_COLOR[code] + '">' + amount + ' ' + name + '</span>';
+    const items = [...primary.map(rowHtml), ...secondary.map(rowHtml)];
     document.getElementById("attributeStrip").innerHTML = items.length
       ? '<span class="qs-group qs-attr"><span class="qs-label">Gear Attributes</span>' + items.join("") + '</span>'
-      : '<span class="qs-empty">No gear equipped yet.</span>';
+      : '<span class="qs-empty">No bonuses yet.</span>';
   }
 
   // =================== INVENTORY: in-depth details ===================
@@ -987,11 +1023,33 @@
   const dialog = document.getElementById("pickerDialog");
   document.getElementById("pickerClose").addEventListener("click", () => dialog.close());
 
+  // fixed secondary attributes are shown by name (they're real, known values); selectable ones
+  // are lumped into a plain count instead of naming one auto-picked guess - the actual pick
+  // happens after equipping, same reasoning as the mod-slot tag above.
+  function secondaryAttrsHtml(slots) {
+    const present = slots.filter(Boolean);
+    const fixed = present.filter((a) => !a.selectable);
+    const selectableCount = present.length - fixed.length;
+    const parts = fixed.map((a) => '<span>' + a.Stat + ' +' + a.Max + '</span>');
+    if (selectableCount) parts.push('<span>' + selectableCount + " Secondary Attribute" + (selectableCount > 1 ? "s" : "") + '</span>');
+    return parts.join("");
+  }
+  // a brand or gearset's full tier list (1pc..6pc), for previewing what equipping this piece
+  // works toward before you commit to it.
+  function brandTierSummary(brand) {
+    const tiers = [];
+    for (let t = 0; t < 6; t++) {
+      const found = DATA.brandSetBonuses.find((b) => b.Brand === brand + t);
+      if (!found) continue;
+      tiers.push((t + 1) + "pc: " + (found.stat === "Talent" ? found.Talent : found.stat + " +" + found.val + (found.stat1 ? ", " + found.stat1 + " +" + found.val1 : "")));
+    }
+    return tiers;
+  }
   function weaponRowHtml(w) {
     const attrs = [];
-    if (w.attribute1) attrs.push('<span class="' + (w.attr1Assumed ? "assumed" : "") + '">' + w.attribute1.Stat + " +" + w.attribute1.Max + (w.attr1Assumed ? " (assumed)" : "") + '</span>');
     attrs.push('<span>Core: ' + w.core1.stat + ' +' + w.core1.max + '%</span>');
     if (w.core2 && w.core2.stat) attrs.push('<span>Core 2: ' + w.core2.stat + ' +' + w.core2.max + '</span>');
+    attrs.push(secondaryAttrsHtml([w.attribute1]));
     return '<span class="piname">' + w.name + (w.variant !== w.name ? " (" + w.variant + ")" : "") + '</span>' +
       '<span class="piquality"><span class="qtag q-' + qClass(w.quality) + '">' + w.quality + '</span> ' + w.weaponType + '</span>' +
       '<span class="piattrs">' + attrs.join("") + '</span>' +
@@ -999,12 +1057,10 @@
   }
   function gearRowHtml(g) {
     const attrs = [];
-    attrs.push('<span>Core: ' + g.core.label + (g.coreAssumed ? " (assumed)" : "") + '</span>');
+    attrs.push('<span>Core: ' + g.core.label + '</span>');
     if (g.coreTwo) attrs.push('<span>Core 2: ' + g.coreTwo.label + '</span>');
     if (g.coreThree) attrs.push('<span>Core 3: ' + g.coreThree.label + '</span>');
-    if (g.attribute1) attrs.push('<span class="' + (g.attr1Assumed ? "assumed" : "") + '">' + g.attribute1.Stat + " +" + g.attribute1.Max + (g.attr1Assumed ? " (assumed)" : "") + '</span>');
-    if (g.attribute2) attrs.push('<span class="' + (g.attr2Assumed ? "assumed" : "") + '">' + g.attribute2.Stat + " +" + g.attribute2.Max + (g.attr2Assumed ? " (assumed)" : "") + '</span>');
-    if (g.attribute3) attrs.push('<span class="' + (g.attr3Assumed ? "assumed" : "") + '">' + g.attribute3.Stat + " +" + g.attribute3.Max + (g.attr3Assumed ? " (assumed)" : "") + '</span>');
+    attrs.push(secondaryAttrsHtml([g.attribute1, g.attribute2, g.attribute3]));
     // every mod slot is player-choosable (not fixed like a named/exotic attribute can be), so
     // showing one specific auto-picked stat here would misleadingly read as fixed - just flag
     // that the slot exists; the actual pick happens after equipping.
@@ -1012,9 +1068,14 @@
       ? '<span class="mod-slot-tag">' + img("ui", "blank_mod.png", "mod-slot-icon") + 'Has Mod Slot</span>'
       : '<span>No Mod Slot</span>');
     if (g.modTwo) attrs.push('<span class="mod-slot-tag">' + img("ui", "blank_mod.png", "mod-slot-icon") + 'Has 2nd Mod Slot</span>');
+    const tiers = brandTierSummary(g.brand);
+    const tierHtml = tiers.length
+      ? '<span class="pi-tiers ' + (g.quality === "Gearset" ? "is-gearset" : "is-brand") + '">' + tiers.join(" · ") + '</span>'
+      : "";
     return '<span class="piname">' + g.name + '</span>' +
       '<span class="piquality"><span class="qtag q-' + qClass(g.quality) + '">' + g.quality + '</span></span>' +
       '<span class="piattrs">' + attrs.join("") + '</span>' +
+      tierHtml +
       (g.talent ? '<span class="pitalent">' + talentBlock(g.talent.Talent, g.talent.Desc) + '</span>' : g.talentAssumed ? '<span class="pitalent assumed">Any talent — choose after equipping</span>' : "");
   }
 
@@ -1060,10 +1121,11 @@
 
   function openWeaponPicker(slotKey) {
     const cfg = WEAPON_SLOTS.find((s) => s.key === slotKey);
-    let pool = cfg.filter ? DATA.weapons.filter((w) => w.Slot === cfg.filter) : DATA.weapons;
+    let pool = DATA.weapons.filter((w) => w.Slot === cfg.slot);
     if (hasExoticWeaponElsewhere(slotKey)) pool = pool.filter((w) => w.Quality !== "Exotic");
     const items = sortByQuality(pool, (w) => w.Quality, (w) => w.Name);
-    const opts = cfg.filter ? {} : { categories: WEAPON_TYPES, categorize: (w) => w["Weapon Type"] };
+    // sidearms are pistol-only, so a category picker would be pointless there
+    const opts = cfg.slot === "S" ? {} : { categories: WEAPON_TYPES, categorize: (w) => w["Weapon Type"] };
     openPicker("Select " + cfg.label, items, Engine.resolveWeapon, weaponRowHtml, (w) => { state.weapons[slotKey] = w; }, opts);
   }
   function openGearPicker(slot) {

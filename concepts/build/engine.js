@@ -56,13 +56,16 @@ window.Engine = (function () {
 
 		// ---- gear core slot (Weapon Damage / Skill Tier / Armor): identity is fixed by the
 		// item unless the CSV leaves it blank ("A", Crafted gear only); the roll VALUE is
-		// always overridable by the player, defaulting to max. ----
-		function resolveCoreSlot(rawLabel) {
+		// always overridable by the player, defaulting to max. The listed core is only the
+		// default roll, not a hard lock - recalibration can reroll it to any of the 3, so the
+		// primary core slot is selectable on every non-Exotic piece (Exotic core setups are
+		// fixed/signature, e.g. Memento's 3 cores, and can't be recalibrated). ----
+		function resolveCoreSlot(rawLabel, alwaysSelectable) {
 			if (!rawLabel) return null;
 			const generic = isAny(rawLabel);
 			const base = generic ? CORE_ATTRIBUTES[2] : CORE_ATTRIBUTES.find((c) => c.label === rawLabel);
 			if (!base) return null;
-			return { label: base.label, Max: base.Max, Type: base.Type, value: base.Max, selectable: generic };
+			return { label: base.label, Max: base.Max, Type: base.Type, value: base.Max, selectable: generic || !!alwaysSelectable };
 		}
 
 		// ---- minor gear attribute pool/lookup ----
@@ -112,7 +115,7 @@ window.Engine = (function () {
 		function resolveGear(raw) {
 			if (!raw) return null;
 			const quality = raw.Quality;
-			const core = resolveCoreSlot(raw.Core);
+			const core = resolveCoreSlot(raw.Core, quality !== "Exotic");
 			const coreTwo = resolveCoreSlot(raw["Core 2"]);
 			const coreThree = resolveCoreSlot(raw["Core 3"]);
 			// attribute2 resolved first so attribute1's auto-pick (when both are generic) avoids duplicating it
