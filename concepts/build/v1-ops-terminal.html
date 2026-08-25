@@ -549,10 +549,10 @@
   function stripHtml(html) { return html.replace(/<[^>]*>/g, " "); }
   function fmt(n) { return Math.round(n).toLocaleString(); }
 
-  // Exotic > Gear Set > Named > everything else (High-End), then alphabetical within each tier
+  // Exotic > Named > Gear Set > everything else (High-End), then alphabetical within each tier
   // handles both full names (Exotic/Gearset/Named/High End) and the single-letter
   // codes used in the talent tables (E/S/N/A).
-  const QUALITY_ORDER = { Exotic: 0, E: 0, Gearset: 1, S: 1, Named: 2, N: 2 };
+  const QUALITY_ORDER = { Exotic: 0, E: 0, Named: 1, N: 1, Gearset: 2, S: 2 };
   function qualityRank(q) { return QUALITY_ORDER[qClass(q)] !== undefined ? QUALITY_ORDER[qClass(q)] : 3; }
   function sortByQuality(list, getQuality, getName) {
     return list.slice().sort((a, b) => {
