@@ -145,6 +145,28 @@ window.Engine = (function () {
 			const max = Number(maxRaw);
 			return { stat, max, value: max };
 		}
+
+		// ---- weapon attachments (Optic / Under Barrel / Magazine / Muzzle). A weapon's raw CSV
+		// cell lists "/"-separated compatible mod Type tokens ("Neutral / Short / Long"); many
+		// Named/Exotic weapons instead list a single Type matching their own name, meaning that
+		// slot has exactly one dedicated mod (still shown, just not a real choice). Unlike gear
+		// attributes the bonus VALUE is fixed per attachment - picking one picks its value too. ----
+		function weaponModPool(slotLabel, typeFilter) {
+			if (!typeFilter) return [];
+			const types = typeFilter.split("/").map((t) => t.trim()).filter(Boolean);
+			return DATA.weaponMods.filter((m) => m.Slot === slotLabel && types.includes(m.Type));
+		}
+		function resolveWeaponModSlot(slotLabel, typeFilter) {
+			const pool = weaponModPool(slotLabel, typeFilter);
+			if (!pool.length) return null;
+			const best = pool.slice().sort((a, b) => (Number(b.valPos) || 0) - (Number(a.valPos) || 0))[0];
+			return {
+				slot: slotLabel, name: best.Name, type: best.Type,
+				pos: best.pos || null, valPos: Number(best.valPos) || 0,
+				neg: best.neg || null, valNeg: Number(best.valNeg) || 0,
+				selectable: pool.length > 1,
+			};
+		}
 		// ---- resolve one weapon CSV row into a fully-rolled instance ----
 		function resolveWeapon(raw) {
 			if (!raw) return null;
@@ -160,6 +182,12 @@ window.Engine = (function () {
 				if (isAny(raw.Talent)) talentAssumed = true;
 				else talent = DATA.weaponTalents.find((t) => t.Name === raw.Talent);
 			}
+			const mods = {
+				optic: resolveWeaponModSlot("Optic", raw.Optics),
+				underBarrel: resolveWeaponModSlot("Under Barrel", raw["Under Barrel"]),
+				magazine: resolveWeaponModSlot("Magazine", raw.Magazine),
+				muzzle: resolveWeaponModSlot("Muzzle", raw.Muzzle),
+			};
 			return {
 				raw, name: raw.Name, variant: raw.Variant, slot: raw.Slot, quality,
 				weaponType: raw["Weapon Type"], icon: raw.Icon, iconRef: raw["Icon Ref"],
@@ -169,7 +197,7 @@ window.Engine = (function () {
 				core1, core2,
 				attribute1, attr1Assumed: !!(attribute1 && attribute1.selectable),
 				talent, talentAssumed,
-				mods: { optic: raw.Optics, underBarrel: raw["Under Barrel"], magazine: raw.Magazine, muzzle: raw.Muzzle },
+				mods,
 			};
 		}
 
@@ -270,18 +298,39 @@ window.Engine = (function () {
 					if (weapon.attribute1 && weapon.attribute1.Stat === statName) v += rollOf(weapon.attribute1);
 					return v;
 				}
-				const hsd = weapon.hsd + fromGunAndGear("Headshot Damage");
-				const chd = 25 + fromGunAndGear("Critical Hit Damage");
-				const chc = fromGunAndGear("Critical Hit Chance");
+				const modSlots = [weapon.mods.optic, weapon.mods.underBarrel, weapon.mods.magazine, weapon.mods.muzzle];
+				function fromGunMods(statName) {
+					let v = 0;
+					modSlots.forEach((m) => {
+						if (!m) return;
+						if (m.pos === statName) v += m.valPos;
+						if (m.neg === statName) v += m.valNeg;
+					});
+					return v;
+				}
+				const hsd = weapon.hsd + fromGunMods("Headshot Damage") + fromGunAndGear("Headshot Damage");
+				const chd = 25 + fromGunMods("Critical Hit Damage") + fromGunAndGear("Critical Hit Damage");
+				const chc = fromGunMods("Critical Hit Chance") + fromGunAndGear("Critical Hit Chance");
 				const dta = fromGunAndGear("Damage to Armor");
 				const dtooc = fromGunAndGear("Damage to TOC");
+
+				// magazine's "Extra Rounds" mod adds flat capacity; reload speed comes from
+				// Weapon Handling (any mod slot) plus the magazine's own Reload Speed % tradeoff -
+				// gear/SHD Reload Speed % is read once here, not doubled.
+				const magazine = weapon.mods.magazine;
+				const extraRounds = magazine && magazine.pos === "Extra Rounds" ? magazine.valPos : 0;
+				const totalMagSize = weapon.magSize + extraRounds;
+				let reloadSpeedPct = fromGunMods("Weapon Handling") + (stats.Offensive["Reload Speed %"] || 0);
+				if (magazine && magazine.pos === "Reload Speed %") reloadSpeedPct += magazine.valPos;
+				else if (magazine && magazine.neg === "Reload Speed %") reloadSpeedPct += magazine.valNeg;
+				const reloadSpeedMs = weapon.reloadSpeedMs / (1 + reloadSpeedPct / 100);
 
 				return {
 					weapon, baseDamage: weapon.baseDamage, totalPct, totalDamage,
 					hsd, chd, chc,
 					dmgToArmored: Math.round(totalDamage * (1 + dta / 100)),
 					dmgToOutOfCover: Math.round(totalDamage * (1 + dtooc / 100)),
-					rpm: weapon.rpm, magSize: weapon.magSize,
+					rpm: weapon.rpm, magSize: weapon.magSize, totalMagSize, reloadSpeedMs, reloadSpeedPct,
 					AWD, weaponSpecificDamage, genericWeaponDamage,
 				};
 			}
@@ -362,6 +411,7 @@ window.Engine = (function () {
 			CORE_ATTRIBUTES, modPool, defaultSHDLevels, SHD_LEVELS_DEF,
 			attributePool: (excludeStat) => attributePool(DATA.gearAttributes, excludeStat),
 			weaponAttributePool: (excludeStat) => attributePool(DATA.weaponAttributes, excludeStat),
+			weaponModPool,
 		};
 	}
 

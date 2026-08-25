@@ -7,7 +7,7 @@
   :root {
     --bg: #0a0a09; --panel: #14140f; --panel-2: #1c1c15; --line: #33321f;
     --text: #ece9df; --muted: #948f78; --accent: #f2711c; --accent-dim: #4a2a0d;
-    --red: #cf3f2e; --blue: #3a86c8; --yellow: #e0b62f;
+    --red: #cf3f2e; --blue: #3a86c8; --yellow: #e0b62f; --purple: #c084fc;
     --q-exotic: #d9432e; --q-named: #e3a73b; --q-gearset: #2fa89c; --q-highend: #e3a73b; --q-named-text: #e85dae;
     --kw-exotic: #f2711c; --kw-named: #e85dae; --kw-highend: #e0b62f; --kw-amplify: #9dff1f;
     --font-display: "Oswald", "Arial Narrow", sans-serif;
@@ -18,7 +18,7 @@
     :root:not([data-theme="dark"]):not([data-theme="light"]) {
       --bg: #eeece3; --panel: #ffffff; --panel-2: #f5f3e9; --line: #d8d4bf;
       --text: #201e15; --muted: #6b6752; --accent: #c05a12; --accent-dim: #f4ddc6;
-      --kw-amplify: #5a8f00;
+      --kw-amplify: #5a8f00; --purple: #8b5cf6;
     }
   }
   :root[data-theme="light"] {
@@ -73,6 +73,11 @@
   .stat-summary-wrap.open .sc-caret { transform: rotate(180deg); color: var(--accent); }
   .stat-chip .sc-value { font-family: var(--font-display); font-size: 26px; font-weight: 600; margin-top: 2px; }
   .stat-chip .sc-sub { font-family: var(--font-mono); font-size: 11px; color: var(--accent); margin-left: 6px; }
+  .stat-chip .sc-cap-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: 7px; vertical-align: middle; }
+  .stat-detail-row .cap-badge {
+    font-family: var(--font-mono); font-size: 9px; padding: 1px 5px; margin-left: 6px; background: var(--accent-dim);
+    color: var(--accent); border-radius: 2px; text-transform: uppercase; letter-spacing: .04em;
+  }
   .stat-details { grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); background: var(--panel-2); display: none; }
   .stat-summary-wrap.open .stat-details { display: grid; }
   .stat-detail-col { border-left: 1px solid var(--line); padding: 4px 0; }
@@ -179,16 +184,20 @@
     background: var(--panel-2); border-left: 4px solid var(--line); padding: 12px; min-height: 92px;
     display: flex; flex-direction: column; justify-content: flex-start; gap: 8px; position: relative;
   }
-  .item-tile > [data-weapon-slot], .item-tile > [data-gear-slot] { cursor: pointer; }
-  .item-tile > [data-weapon-slot]:hover .tile-name, .item-tile > [data-gear-slot]:hover .tile-name { text-decoration: underline; }
+  .item-tile[data-weapon-slot], .item-tile[data-gear-slot] { cursor: pointer; }
+  .item-tile[data-weapon-slot]:hover .tile-name, .item-tile[data-gear-slot]:hover .tile-name { text-decoration: underline; }
   .item-tile:hover { background: var(--accent-dim); }
   .item-tile.core-O { border-left-color: var(--red); }
   .item-tile.core-D { border-left-color: var(--blue); }
   .item-tile.core-U { border-left-color: var(--yellow); }
-  .item-tile .tile-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
-  .item-tile .tile-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-  .item-tile .tile-icon { width: 22px; height: 22px; opacity: .85; flex-shrink: 0; }
-  .item-tile .tile-name { font-family: var(--font-body); font-weight: 600; font-size: 14px; margin-top: 6px; line-height: 1.25; }
+  .item-tile .tile-top { display: flex; align-items: center; gap: 6px; padding-right: 22px; }
+  .item-tile .tile-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; flex-shrink: 0; }
+  .item-tile .tile-icon { width: 15px; height: 15px; opacity: .85; flex-shrink: 0; }
+  .item-tile .tile-subtype {
+    font-family: var(--font-mono); font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .item-tile .tile-subtype::before { content: "· "; }
+  .item-tile .tile-name { font-family: var(--font-body); font-weight: 600; font-size: 14px; margin-top: 2px; line-height: 1.25; }
   .item-tile .tile-name.placeholder { color: var(--muted); font-weight: 400; font-style: italic; }
   .item-tile .tile-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .item-tile.q-Exotic { box-shadow: inset 0 2px 0 var(--q-exotic); }
@@ -222,7 +231,20 @@
   /* inline roll editors (core / attribute / mod value + identity overrides) */
   .roll-rows { padding: 8px 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 5px; }
   .roll-row { display: flex; align-items: center; gap: 6px; font-size: 11.5px; }
-  .roll-row .roll-select { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); color: var(--text); font-family: var(--font-mono); font-size: 11px; padding: 3px 4px; }
+  .roll-row .roll-select, .roll-row .attach-select { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); color: var(--text); font-family: var(--font-mono); font-size: 11px; padding: 3px 4px; }
+  .attach-block { border-top: 1px solid var(--line); }
+  .attach-toggle {
+    width: 100%; text-align: left; background: none; border: none; padding: 6px 12px; cursor: pointer;
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .attach-toggle:hover { color: var(--accent); }
+  .attach-rows { border-top: 1px solid var(--line); }
+  .roll-row .attach-slot-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); width: 64px; flex-shrink: 0; }
+  .roll-row .attach-bonus {
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--text); white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; flex-shrink: 0; max-width: 130px;
+  }
   .roll-row .roll-label-fixed { flex: 1; min-width: 0; color: var(--muted); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .roll-row .roll-input { width: 64px; flex-shrink: 0; background: var(--panel); border: 1px solid var(--line); color: var(--text); font-family: var(--font-mono); font-size: 11px; padding: 3px 4px; text-align: right; }
   .roll-row .roll-icon { width: 15px; height: 15px; flex-shrink: 0; opacity: .9; }
@@ -233,6 +255,11 @@
   .kw-named { color: var(--kw-named); font-weight: 600; }
   .kw-highend { color: var(--kw-highend); font-weight: 600; }
   .kw-amplify { color: var(--kw-amplify); font-weight: 700; }
+  .kw-damage { color: var(--red); font-weight: 600; }
+  .kw-utility { color: var(--yellow); font-weight: 600; }
+  .kw-defense { color: var(--blue); font-weight: 600; }
+  .kw-condition { color: var(--purple); font-weight: 600; }
+  .kw-distance { color: var(--accent); font-weight: 600; }
 
   /* ---------- SHD WATCH ---------- */
   .shd-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
@@ -291,6 +318,8 @@
   .pitem .piquality { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
   .pitem .piattrs { grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
   .pitem .piattrs .assumed { opacity: .7; }
+  .pitem .piattrs .mod-slot-tag { display: inline-flex; align-items: center; gap: 4px; }
+  .pitem .piattrs .mod-slot-icon { width: 13px; height: 13px; opacity: .85; }
   .pitem .pitalent { grid-column: 1 / -1; font-size: 12.5px; }
   .pitem .pitalent .tt-name { font-weight: 600; color: var(--accent); }
   .pitem .pitalent .tt-desc { color: var(--muted); margin-top: 3px; line-height: 1.4; white-space: pre-line; }
@@ -316,8 +345,8 @@
         <div class="stat-chips" id="statChips"></div>
         <div class="stat-details" id="statDetails"></div>
       </div>
-      <div class="quality-strip" id="attributeStrip"></div>
       <div class="quality-strip" id="qualityStrip"></div>
+      <div class="quality-strip" id="attributeStrip"></div>
       <div class="loadout-settings">
         <div class="setting-card">
           <div class="setting-head">
@@ -474,6 +503,7 @@
 
   const state = { weapons: {}, gear: {}, skills: {}, spec: null, shd: loadSHD(), expertise: loadExpertise() };
   let summaryOpen = false;
+  let attachExpanded = {}; // weapon slot key -> bool, session-only UI state
 
   function img(kind, file, cls) { const src = Engine.iconSrc(kind, file); return src ? '<img class="' + (cls || "") + '" src="' + src + '" alt="">' : ""; }
   function qClass(quality) { return quality ? quality.replace(/\s+/g, "") : ""; }
@@ -491,14 +521,39 @@
       return getName ? String(getName(a)).localeCompare(String(getName(b))) : 0;
     });
   }
-  // colors the words that matter for scanning builds at a glance: quality tiers, and the
-  // "Amplify"/"Amplifies" keyword that marks multiplicative (not additive) damage bonuses
+  // colors the words that matter for scanning builds at a glance: quality tiers, the
+  // "Amplify" keyword (multiplicative, not additive, damage), the stat category a bonus
+  // belongs to (red=damage, yellow=utility/skill, blue=defense), status effects/conditions
+  // a talent triggers on or inflicts, and distances (the game's own orange).
+  const KW_DAMAGE = ["Weapon Damage", "Assault Rifle Damage", "LMG Damage", "Marksman Rifle Damage", "Pistol Damage", "Rifle Damage", "Shotgun Damage", "SMG Damage",
+    "Critical Hit Chance", "Critical Hit Damage", "Headshot Damage", "Damage to Armor", "Damage to TOC", "Damage to Health", "Health Damage", "Damage to Electronics", "Explosive Damage"];
+  const KW_UTILITY = ["Reload Speed", "Stability", "Accuracy", "Magazine Size", "Weapon Handling", "Rate of Fire",
+    "Optimal Range", "Swap Speed", "Ammo Capacity", "Extra Rounds", "Skill Haste", "Skill Damage", "Skill Duration", "Repair Skills", "Skill Tier", "Skill Efficiency", "Skill Health", "Status Effects"];
+  const KW_DEFENSE = ["Total Armor", "Armor Regeneration", "Health", "Hazard Protection", "Explosive Resistance",
+    "Incoming Repairs", "Protection from Elites", "Armor on Kill"];
+  const KW_CONDITION = ["Bleed Resistance", "Burn Resistance", "Shock Resistance", "Disrupt Resistance", "Disorient Resistance", "Ensnare Resistance", "Pulse Resistance", "Blind/Deaf Resistance",
+    "Bleed", "Burn", "Shock", "Disrupt", "Disorient", "Ensnare", "Blind", "Deaf", "Confuse", "Confused", "Suppressed", "Suppression"];
+  // one combined map + single regex pass (longest phrase first) rather than one pass per
+  // category - running separate passes let a short word like "Health" re-match text a longer
+  // phrase ("Skill Health") had already wrapped in the previous pass, nesting spans.
+  const KW_MAP = new Map();
+  [[KW_DAMAGE, "kw-damage"], [KW_UTILITY, "kw-utility"], [KW_DEFENSE, "kw-defense"], [KW_CONDITION, "kw-condition"]].forEach(([list, cls]) => {
+    list.forEach((w) => KW_MAP.set(w.toLowerCase(), cls));
+  });
+  const KW_PATTERN = new RegExp(
+    "\\b(" + [...KW_MAP.keys()].sort((a, b) => b.length - a.length).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")\\b",
+    "gi"
+  );
   function highlightKeywords(text) {
     return text
       .replace(/\b(Amplifies|Amplify|Amplified|Amplification)\b/g, '<span class="kw-amplify">$1</span>')
       .replace(/\bExotic\b/g, '<span class="kw-exotic">Exotic</span>')
       .replace(/\bNamed\b/g, '<span class="kw-named">Named</span>')
-      .replace(/\bHigh End\b/g, '<span class="kw-highend">High End</span>');
+      .replace(/\bHigh End\b/g, '<span class="kw-highend">High End</span>')
+      // distances: "7m" / "7 meters" but not "9mm" (ammo caliber)
+      .replace(/\b(\d+(?:\.\d+)?m)(?!m)\b/g, '<span class="kw-distance">$1</span>')
+      .replace(/\b(\d+(?:\.\d+)?\s+meters?)\b/gi, '<span class="kw-distance">$1</span>')
+      .replace(KW_PATTERN, (m) => '<span class="' + KW_MAP.get(m.toLowerCase()) + '">' + m + '</span>');
   }
   function compactDesc(text) { return text ? highlightKeywords(text.replace(/(\r?\n){2,}/g, "\n").trim()) : text; }
   function talentBlock(name, desc) {
@@ -521,6 +576,10 @@
   function renderStatSummary() {
     const result = computeCurrent();
     const p = result.weaponStats.Primary;
+    // Critical Hit Chance can't exceed 60% in game - flag it the moment a build reaches or
+    // passes that cap, both inline in the detail and as a small always-visible dot on the chip.
+    const CHC_CAP = 60;
+    const chcCapped = !!(p && p.chc >= CHC_CAP);
     const chips = [
       {
         key: "damage", label: "Weapon Damage", value: p ? fmt(p.totalDamage) : "—", sub: p ? "+" + Math.round(p.totalPct) + "%" : "",
@@ -530,7 +589,7 @@
           ["Total Damage", fmt(p.totalDamage)],
           ["Headshot Damage", Math.round(p.hsd) + "%"],
           ["Critical Hit Damage", Math.round(p.chd) + "%"],
-          ["Critical Hit Chance", Math.round(p.chc) + "%"],
+          ["Critical Hit Chance", Math.round(p.chc) + "%" + (chcCapped ? ' <span class="cap-badge" title="Critical Hit Chance caps at 60% in game">' + CHC_CAP + '% CAP</span>' : "")],
           ["RPM / Magazine", p.rpm + " / " + p.magSize],
         ] : [["No primary weapon equipped", "—"]],
       },
@@ -554,7 +613,7 @@
     document.getElementById("statSummaryWrap").className = "stat-summary-wrap" + (summaryOpen ? " open" : "");
     document.getElementById("statChips").innerHTML = chips.map((c) =>
       '<div class="stat-chip" data-chip="' + c.key + '">' +
-      '<div class="sc-top"><span class="sc-label">' + c.label + '</span><span class="sc-caret">▾</span></div>' +
+      '<div class="sc-top"><span class="sc-label">' + c.label + (c.key === "damage" && chcCapped ? '<span class="sc-cap-dot" title="Critical Hit Chance capped at 60%"></span>' : "") + '</span><span class="sc-caret">▾</span></div>' +
       '<div class="sc-value">' + c.value + (c.sub ? '<span class="sc-sub">' + c.sub + '</span>' : "") + '</div></div>'
     ).join("");
     document.getElementById("statDetails").innerHTML = chips.map((c) =>
@@ -596,18 +655,23 @@
   }
 
   // =================== INVENTORY: gear core/attribute tally (Nx Weapon Damage, Nx Crit Chance, ...) ===================
+  const STAT_TYPE_COLOR = { O: "var(--red)", D: "var(--blue)", U: "var(--yellow)" };
   function renderAttributeStrip() {
-    const counts = {};
-    const bump = (name) => { if (name) counts[name] = (counts[name] || 0) + 1; };
+    const primary = {}, secondary = {};
+    const bump = (map, name, type) => { if (!name) return; map[name] = map[name] || { count: 0, type }; map[name].count++; };
     GEAR_SLOTS.forEach((s) => {
       const g = state.gear[s.key];
       if (!g) return;
-      [g.core, g.coreTwo, g.coreThree].forEach((c) => bump(c && c.label));
-      [g.attribute1, g.attribute2, g.attribute3].forEach((a) => bump(a && a.Stat));
+      [g.core, g.coreTwo, g.coreThree].forEach((c) => bump(primary, c && c.label, c && c.Type));
+      [g.attribute1, g.attribute2, g.attribute3].forEach((a) => bump(secondary, a && a.Stat, a && a.Type));
     });
-    const items = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    const sorted = (map) => Object.entries(map).sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]));
+    const itemHtml = ([name, info]) => '<span class="qs-item" style="color:' + (STAT_TYPE_COLOR[info.type] || "var(--text)") + '">' + info.count + '×' + name + '</span>';
+    // Primary (core) attributes first, then secondary - each colored by stat type
+    // (red = Offensive, blue = Defensive, yellow = Utility), matching the core icons elsewhere.
+    const items = [...sorted(primary).map(itemHtml), ...sorted(secondary).map(itemHtml)];
     document.getElementById("attributeStrip").innerHTML = items.length
-      ? '<span class="qs-group qs-attr"><span class="qs-label">Gear Attributes</span>' + items.map(([name, n]) => '<span class="qs-item">' + n + '×' + name + '</span>').join("") + '</span>'
+      ? '<span class="qs-group qs-attr"><span class="qs-label">Gear Attributes</span>' + items.join("") + '</span>'
       : '<span class="qs-empty">No gear equipped yet.</span>';
   }
 
@@ -621,21 +685,32 @@
       const rows = w ? [
         ["Base Damage", fmt(w.baseDamage)], ["Total Damage", fmt(w.totalDamage)], ["Damage to Armored", fmt(w.dmgToArmored)],
         ["Damage Out of Cover", fmt(w.dmgToOutOfCover)], ["Headshot Damage", Math.round(w.hsd) + "%"], ["Critical Hit Damage", Math.round(w.chd) + "%"],
-        ["Critical Hit Chance", Math.round(w.chc) + "%"], ["RPM", w.rpm], ["Magazine Size", w.magSize],
+        ["Critical Hit Chance", Math.round(w.chc) + "%"], ["RPM", w.rpm],
+        ["Magazine Size", w.totalMagSize !== w.magSize ? w.totalMagSize + " (base " + w.magSize + ")" : w.magSize],
+        ["Reload Speed", (w.reloadSpeedMs / 1000).toFixed(2) + "s" + (w.reloadSpeedPct ? " (" + (w.reloadSpeedPct > 0 ? "+" : "") + Math.round(w.reloadSpeedPct) + "%)" : "")],
       ].concat(w.weapon.core2 && w.weapon.core2.stat ? [["Core 2 (" + w.weapon.core2.stat + ")", "+" + w.weapon.core2.max]] : []) : [["No weapon equipped", "—"]];
       return { title: s.label + (item ? " — " + item.name : ""), rows };
     }
     // Primary + the three stat columns lead (first row at typical widths); Secondary and
     // Sidearm — checked far less often — trail at the end.
     cols.push(weaponCol(WEAPON_SLOTS[0]));
+    // in the Offensive column specifically, split damage-dealing stats (red) from
+    // handling/utility-ish ones that just happen to be typed "Offensive" (yellow)
+    const isDamageStat = (name) => /Damage|Critical Hit/i.test(name);
     ["Offensive", "Defensive", "Utility"].forEach((cat) => {
       const entries = Object.entries(result.stats[cat]);
-      cols.push({ title: cat + " Stats", rows: entries.length ? entries.map(([k, v]) => [k, (v > 0 ? "+" : "") + (Math.round(v * 10) / 10) + (Number.isInteger(v) && Math.abs(v) > 1000 ? "" : "")]) : [["Nothing equipped yet", "—"]] });
+      cols.push({
+        title: cat + " Stats",
+        rows: entries.length ? entries.map(([k, v]) => [
+          k, (v > 0 ? "+" : "") + (Math.round(v * 10) / 10) + (Number.isInteger(v) && Math.abs(v) > 1000 ? "" : ""),
+          cat === "Offensive" ? (isDamageStat(k) ? "var(--red)" : "var(--yellow)") : null,
+        ]) : [["Nothing equipped yet", "—"]],
+      });
     });
     cols.push(weaponCol(WEAPON_SLOTS[1]), weaponCol(WEAPON_SLOTS[2]));
     document.getElementById("depthTables").innerHTML = cols.map((c) =>
       '<div class="depth-col"><div class="grid-block-head" style="font-size:13px">' + c.title + '</div>' +
-      c.rows.map((r) => '<div class="readout-row" style="padding:7px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;font-size:12.5px"><span style="color:var(--muted)">' + r[0] + '</span><span style="font-family:var(--font-mono)">' + r[1] + '</span></div>').join("") +
+      c.rows.map((r) => '<div class="readout-row" style="padding:7px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;font-size:12.5px"><span style="color:' + (r[2] || "var(--muted)") + '">' + r[0] + '</span><span style="font-family:var(--font-mono)">' + r[1] + '</span></div>').join("") +
       '</div>'
     ).join("");
 
@@ -689,15 +764,17 @@
         if (item.talent) talentHtml = talentBlock(item.talent.Name, item.talent.Desc);
         else if (item.talentAssumed) talentHtml = '<button class="tile-pick-talent" data-pick-weapon-talent="' + s.key + '">Choose Talent →</button>';
       }
-      return '<div class="item-tile' + q + '">' +
+      return '<div class="item-tile' + q + '" data-weapon-slot="' + s.key + '">' +
         (item ? '<button class="tile-unequip" data-unequip-weapon="' + s.key + '" title="Unequip">✕</button>' : "") +
-        '<div data-weapon-slot="' + s.key + '"><div class="tile-top"><span class="tile-label">' + s.label + '</span>' + img("ui", s.icon, "tile-icon") + '</div>' +
+        '<div class="tile-top">' + img("ui", s.icon, "tile-icon") + '<span class="tile-label">' + s.label + '</span>' + (item ? '<span class="tile-subtype">' + item.weaponType + '</span>' : "") + '</div>' +
         '<div class="tile-name' + (item ? "" : " placeholder") + '">' + (item ? item.name + (item.variant !== item.name ? " (" + item.variant + ")" : "") : "Choose weapon") + '</div>' +
-        (item ? '<div class="tile-meta"><span class="qtag q-' + qClass(item.quality) + '">' + item.quality + '</span> ' + item.weaponType + '</div>' : "") + '</div>' +
         (item ? weaponRollRowsHtml(item, s.key) : "") + talentHtml +
         '</div>';
     }).join("");
     el.querySelectorAll("[data-weapon-slot]").forEach((elm) => elm.addEventListener("click", () => openWeaponPicker(elm.dataset.weaponSlot)));
+    // the whole tile opens the picker, so every interactive control inside it must stop the
+    // click from bubbling there — selects/inputs open/type as normal instead of also popping the picker
+    el.querySelectorAll(".roll-select, .roll-input, .attach-select").forEach((elm) => elm.addEventListener("click", (e) => e.stopPropagation()));
     el.querySelectorAll("[data-pick-weapon-talent]").forEach((elm) => elm.addEventListener("click", (e) => { e.stopPropagation(); openWeaponTalentPicker(elm.dataset.pickWeaponTalent); }));
     el.querySelectorAll("[data-unequip-weapon]").forEach((elm) => elm.addEventListener("click", (e) => { e.stopPropagation(); state.weapons[elm.dataset.unequipWeapon] = null; renderInventory(); }));
     el.querySelectorAll(".roll-select").forEach((sel) => sel.addEventListener("change", (e) => {
@@ -716,6 +793,26 @@
       let v = Number(inp.value);
       if (isNaN(v)) v = max;
       slot.value = Math.max(0, Math.min(max, v));
+      renderInventory();
+    }));
+    el.querySelectorAll("[data-attach-toggle]").forEach((btn) => btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      attachExpanded[btn.dataset.attachToggle] = !attachExpanded[btn.dataset.attachToggle];
+      renderInventory();
+    }));
+    el.querySelectorAll(".attach-select").forEach((sel) => sel.addEventListener("change", (e) => {
+      const field = sel.dataset.attachField, weaponKey = sel.dataset.attachSlot;
+      const item = state.weapons[weaponKey];
+      const cfg = ATTACH_SLOTS.find(([key]) => key === field);
+      const pool = Engine.weaponModPool(cfg[1], item.raw[cfg[2]]);
+      const chosen = pool[+sel.value];
+      if (!chosen) return;
+      item.mods[field] = {
+        slot: cfg[1], name: chosen.Name, type: chosen.Type,
+        pos: chosen.pos || null, valPos: Number(chosen.valPos) || 0,
+        neg: chosen.neg || null, valNeg: Number(chosen.valNeg) || 0,
+        selectable: true,
+      };
       renderInventory();
     }));
   }
@@ -744,7 +841,42 @@
   function weaponRollRowsHtml(item, weaponKey) {
     const fields = [["core1", "core"], ["core2", "core"], ["attribute1", "attribute"]];
     const rows = fields.map(([field, kind]) => weaponRollRow(item, field, kind, weaponKey)).join("");
-    return '<div class="roll-rows">' + rows + '</div>';
+    return '<div class="roll-rows">' + rows + '</div>' + weaponAttachmentsHtml(item, weaponKey);
+  }
+
+  // ---- weapon attachments (Optic / Under Barrel / Magazine / Muzzle): unlike core/attribute
+  // rolls the bonus VALUE is fixed by which attachment you pick, so each row is just an identity
+  // choice (or fixed text when only one compatible option exists) plus its resulting bonus text.
+  // Collapsed by default since most weapons have 4 of these and they're checked far less often. ----
+  const ATTACH_SLOTS = [["optic", "Optic", "Optics"], ["underBarrel", "Under Barrel", "Under Barrel"], ["magazine", "Magazine", "Magazine"], ["muzzle", "Muzzle", "Muzzle"]];
+  function attachBonusText(mod) {
+    const parts = [];
+    if (mod.pos) parts.push("+" + mod.valPos + " " + mod.pos);
+    if (mod.neg) parts.push(mod.valNeg + " " + mod.neg);
+    return parts.length ? parts.join(", ") : "No bonus";
+  }
+  function weaponAttachRow(item, key, engineSlot, rawCol, weaponKey) {
+    const mod = item.mods[key];
+    if (!mod) return "";
+    let identityHtml;
+    if (mod.selectable) {
+      const pool = Engine.weaponModPool(engineSlot, item.raw[rawCol]);
+      identityHtml = '<select class="attach-select" data-attach-field="' + key + '" data-attach-slot="' + weaponKey + '">' +
+        pool.map((o, i) => '<option value="' + i + '"' + (o.Name === mod.name ? " selected" : "") + '>' + o.Name + '</option>').join("") +
+        '</select>';
+    } else {
+      identityHtml = '<span class="roll-label-fixed">' + mod.name + '</span>';
+    }
+    return '<div class="roll-row"><span class="attach-slot-label">' + engineSlot + '</span>' + identityHtml + '<span class="attach-bonus">' + attachBonusText(mod) + '</span></div>';
+  }
+  function weaponAttachmentsHtml(item, weaponKey) {
+    const rows = ATTACH_SLOTS.map(([key, engineSlot, rawCol]) => weaponAttachRow(item, key, engineSlot, rawCol, weaponKey)).join("");
+    if (!rows) return "";
+    const open = !!attachExpanded[weaponKey];
+    return '<div class="attach-block">' +
+      '<button type="button" class="attach-toggle" data-attach-toggle="' + weaponKey + '">Attachments<span class="attach-caret">' + (open ? "▾" : "▸") + '</span></button>' +
+      '<div class="roll-rows attach-rows"' + (open ? "" : " hidden") + '>' + rows + '</div>' +
+      '</div>';
   }
 
   function coreClass(item) { return item && item.core ? " core-" + item.core.Type : ""; }
@@ -801,15 +933,15 @@
         if (item.talent) talentHtml = talentBlock(item.talent.Talent, item.talent.Desc);
         else if (item.talentAssumed) talentHtml = '<button class="tile-pick-talent" data-pick-gear-talent="' + s.key + '">Choose Talent →</button>';
       }
-      return '<div class="item-tile' + coreClass(item) + q + '">' +
+      return '<div class="item-tile' + coreClass(item) + q + '" data-gear-slot="' + s.key + '">' +
         (item ? '<button class="tile-unequip" data-unequip-gear="' + s.key + '" title="Unequip">✕</button>' : "") +
-        '<div data-gear-slot="' + s.key + '"><div class="tile-top"><span class="tile-label">' + s.key + '</span>' + img("ui", s.icon, "tile-icon") + '</div>' +
+        '<div class="tile-top">' + img("ui", s.icon, "tile-icon") + '<span class="tile-label">' + s.key + '</span>' + (item ? '<span class="tile-subtype">' + item.brand + '</span>' : "") + '</div>' +
         '<div class="tile-name' + (item ? "" : " placeholder") + '">' + (item ? item.name : "Choose " + s.key.toLowerCase()) + '</div>' +
-        (item ? '<div class="tile-meta"><span class="qtag q-' + qClass(item.quality) + '">' + item.quality + '</span> ' + item.brand + '</div>' : "") + '</div>' +
         (item ? rollRowsHtml(item, s.key) : "") + talentHtml +
         '</div>';
     }).join("");
     el.querySelectorAll("[data-gear-slot]").forEach((elm) => elm.addEventListener("click", () => openGearPicker(elm.dataset.gearSlot)));
+    el.querySelectorAll(".roll-select, .roll-input").forEach((elm) => elm.addEventListener("click", (e) => e.stopPropagation()));
     el.querySelectorAll("[data-pick-gear-talent]").forEach((elm) => elm.addEventListener("click", (e) => { e.stopPropagation(); openGearTalentPicker(elm.dataset.pickGearTalent); }));
     el.querySelectorAll("[data-unequip-gear]").forEach((elm) => elm.addEventListener("click", (e) => { e.stopPropagation(); state.gear[elm.dataset.unequipGear] = null; renderInventory(); }));
     el.querySelectorAll(".roll-select").forEach((sel) => sel.addEventListener("change", (e) => {
@@ -873,8 +1005,13 @@
     if (g.attribute1) attrs.push('<span class="' + (g.attr1Assumed ? "assumed" : "") + '">' + g.attribute1.Stat + " +" + g.attribute1.Max + (g.attr1Assumed ? " (assumed)" : "") + '</span>');
     if (g.attribute2) attrs.push('<span class="' + (g.attr2Assumed ? "assumed" : "") + '">' + g.attribute2.Stat + " +" + g.attribute2.Max + (g.attr2Assumed ? " (assumed)" : "") + '</span>');
     if (g.attribute3) attrs.push('<span class="' + (g.attr3Assumed ? "assumed" : "") + '">' + g.attribute3.Stat + " +" + g.attribute3.Max + (g.attr3Assumed ? " (assumed)" : "") + '</span>');
-    attrs.push('<span class="' + (g.modAssumed ? "assumed" : "") + '">' + (g.mod ? "Mod: " + g.mod.Stat + " +" + g.mod.Max + (g.modAssumed ? " (assumed)" : "") : "No Mod Slot") + '</span>');
-    if (g.modTwo) attrs.push('<span class="' + (g.modTwoAssumed ? "assumed" : "") + '">Mod 2: ' + g.modTwo.Stat + " +" + g.modTwo.Max + '</span>');
+    // every mod slot is player-choosable (not fixed like a named/exotic attribute can be), so
+    // showing one specific auto-picked stat here would misleadingly read as fixed - just flag
+    // that the slot exists; the actual pick happens after equipping.
+    attrs.push(g.mod
+      ? '<span class="mod-slot-tag">' + img("ui", "blank_mod.png", "mod-slot-icon") + 'Has Mod Slot</span>'
+      : '<span>No Mod Slot</span>');
+    if (g.modTwo) attrs.push('<span class="mod-slot-tag">' + img("ui", "blank_mod.png", "mod-slot-icon") + 'Has 2nd Mod Slot</span>');
     return '<span class="piname">' + g.name + '</span>' +
       '<span class="piquality"><span class="qtag q-' + qClass(g.quality) + '">' + g.quality + '</span></span>' +
       '<span class="piattrs">' + attrs.join("") + '</span>' +
@@ -1168,6 +1305,12 @@
     const core1 = slotDiff(w.core1, base.core1); if (core1) ref.core1 = core1;
     const core2 = slotDiff(w.core2, base.core2); if (core2) ref.core2 = core2;
     const attribute1 = slotDiff(w.attribute1, base.attribute1); if (attribute1) ref.attribute1 = attribute1;
+    const mods = {};
+    ATTACH_SLOTS.forEach(([key]) => {
+      const cur = w.mods[key], b = base.mods[key];
+      if (cur && b && cur.name !== b.name) mods[key] = cur.name;
+    });
+    if (Object.keys(mods).length) ref.mods = mods;
     return ref;
   }
   function refGear(g) {
@@ -1233,6 +1376,20 @@
       applySlotRef(resolved, "core1", ref.core1, "weaponCore");
       applySlotRef(resolved, "core2", ref.core2, "weaponCore");
       applySlotRef(resolved, "attribute1", ref.attribute1, "weaponAttribute");
+      if (ref.mods) {
+        ATTACH_SLOTS.forEach(([key, engineSlot, rawCol]) => {
+          const name = ref.mods[key];
+          if (!name) return;
+          const pool = Engine.weaponModPool(engineSlot, raw[rawCol]);
+          const found = pool.find((m) => m.Name === name);
+          if (found) resolved.mods[key] = {
+            slot: engineSlot, name: found.Name, type: found.Type,
+            pos: found.pos || null, valPos: Number(found.valPos) || 0,
+            neg: found.neg || null, valNeg: Number(found.valNeg) || 0,
+            selectable: true,
+          };
+        });
+      }
       state.weapons[s.key] = resolved;
     });
     GEAR_SLOTS.forEach((s) => {
