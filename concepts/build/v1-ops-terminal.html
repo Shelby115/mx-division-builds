@@ -320,6 +320,18 @@
   .picker-head button { background: none; border: 1px solid var(--line); color: var(--text); cursor: pointer; padding: 6px 10px; font-family: var(--font-mono); }
   .picker-search { padding: 10px 18px; border-bottom: 1px solid var(--line); }
   .picker-search input { width: 100%; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); padding: 8px 10px; font-family: var(--font-body); font-size: 14px; }
+  .builds-save-row { display: flex; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+  .builds-save-row input { flex: 1 1 auto; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); padding: 8px 10px; font-family: var(--font-body); font-size: 14px; }
+  .builds-list { overflow-y: auto; max-height: 45vh; }
+  .build-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--line); }
+  .build-row .build-name { font-weight: 600; font-size: 14px; }
+  .build-row .build-date { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .build-row .build-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .build-row .build-actions button { background: none; border: 1px solid var(--line); color: var(--text); cursor: pointer; padding: 5px 9px; font-family: var(--font-mono); font-size: 11px; }
+  .build-row .build-actions button:hover { border-color: var(--accent); color: var(--accent); }
+  .build-row .build-actions .build-delete:hover { border-color: var(--red); color: var(--red); }
+  .builds-empty { padding: 22px 18px; color: var(--muted); font-size: 13px; }
+  .builds-import-row { padding: 12px 18px; }
   .picker-cats { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 18px; border-bottom: 1px solid var(--line); }
   .picker-cat { font-family: var(--font-mono); font-size: 11px; padding: 5px 11px; border: 1px solid var(--line); color: var(--muted); cursor: pointer; background: var(--panel-2); }
   .picker-cat:hover { color: var(--text); }
@@ -358,6 +370,7 @@
     </div>
     <div class="topbar-actions">
       <button class="btn-ghost" id="searchAllBtn">Search All Items</button>
+      <button class="btn-ghost" id="buildsBtn">Saved Builds</button>
       <button class="btn-ghost" id="clearBtn">Clear Loadout</button>
     </div>
   </nav>
@@ -449,6 +462,19 @@
   <div class="picker-search"><input id="pickerSearch" type="text" placeholder="Filter…"></div>
   <div class="picker-cats" id="pickerCats" hidden></div>
   <div class="picker-list" id="pickerList"></div>
+</dialog>
+
+<dialog class="picker" id="buildsDialog">
+  <div class="picker-head"><h3>Saved Builds</h3><button id="buildsClose">Close ✕</button></div>
+  <div class="builds-save-row">
+    <input id="buildSaveName" type="text" placeholder="Name this build…" maxlength="60">
+    <button class="btn-ghost" id="buildSaveBtn">Save Current</button>
+  </div>
+  <div class="builds-list" id="buildsList"></div>
+  <div class="builds-import-row">
+    <button class="btn-ghost" id="buildImportBtn">Import Build (.json)</button>
+    <input id="buildImportFile" type="file" accept="application/json,.json" hidden>
+  </div>
 </dialog>
 
 <script>window.Engine = null;</script>
@@ -546,6 +572,19 @@
   function loadWeaponExpertise() { return loadExpertiseOverrides("weapon-expertise-overrides"); }
   function saveWeaponExpertise() { saveExpertiseOverrides("weapon-expertise-overrides", state.weaponExpertise); }
 
+  // named builds saved in this browser, keyed by name: { [name]: { savedAt, data } }, where
+  // data is a serializeState()-shaped object (the same compact format the shareable URL uses).
+  function loadSavedBuilds() {
+    try {
+      const raw = localStorage.getItem("saved-builds");
+      if (raw) { const parsed = JSON.parse(raw); if (parsed && typeof parsed === "object") return parsed; }
+    } catch (e) { /* ignore corrupt storage */ }
+    return {};
+  }
+  function saveSavedBuilds(builds) {
+    try { localStorage.setItem("saved-builds", JSON.stringify(builds)); } catch (e) { /* storage may be unavailable */ }
+  }
+
   const state = { weapons: {}, gear: {}, skills: {}, spec: null, shd: loadSHD(), expertise: loadExpertise(), gearExpertise: loadGearExpertise(), weaponExpertise: loadWeaponExpertise() };
   let summaryOpen = false;
   let attachExpanded = {}; // weapon slot key -> bool, session-only UI state
@@ -567,7 +606,7 @@
   function qClass(quality) { return quality ? quality.replace(/\s+/g, "") : ""; }
   function stripHtml(html) { return html.replace(/<[^>]*>/g, " "); }
   function fmt(n) { return Math.round(n).toLocaleString(); }
-  function escapeAttr(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;"); }
+  function escapeAttr(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
   // Critical Hit Chance caps at 60% in game - anything rolled above that is wasted. Color the
   // number red once you're over (not just at) the cap, and give it a tooltip breaking down
   // every source that adds up to the uncapped total, so it's obvious what to pull back on.
@@ -1398,6 +1437,100 @@
     }, { categories, categorize: (wrapped) => wrapped.kind === "weapon" ? wrapped.raw["Weapon Type"] : wrapped.gearSlot });
   }
   document.getElementById("searchAllBtn").addEventListener("click", openGlobalSearch);
+
+  // =================== SAVED BUILDS (save/load/export/import) ===================
+  const buildsDialog = document.getElementById("buildsDialog");
+  function fmtSavedAt(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? "" : d.toLocaleString();
+  }
+  function renderBuildsList() {
+    const builds = loadSavedBuilds();
+    const names = Object.keys(builds).sort((a, b) => (builds[b].savedAt || "").localeCompare(builds[a].savedAt || ""));
+    const listEl = document.getElementById("buildsList");
+    listEl.innerHTML = names.length ? names.map((name) => {
+      const esc = escapeAttr(name);
+      return '<div class="build-row"><div><div class="build-name">' + esc + '</div><div class="build-date">' + fmtSavedAt(builds[name].savedAt) + '</div></div>' +
+        '<div class="build-actions">' +
+          '<button data-load-build="' + esc + '">Load</button>' +
+          '<button data-export-build="' + esc + '">Export</button>' +
+          '<button class="build-delete" data-delete-build="' + esc + '">Delete</button>' +
+        '</div></div>';
+    }).join("") : '<div class="builds-empty">No saved builds yet. Save your current loadout above, or import one.</div>';
+    listEl.querySelectorAll("[data-load-build]").forEach((btn) => btn.addEventListener("click", () => {
+      const record = loadSavedBuilds()[btn.dataset.loadBuild];
+      if (!record) return;
+      applyBuildData(record.data);
+      renderInventory();
+      buildsDialog.close();
+    }));
+    listEl.querySelectorAll("[data-export-build]").forEach((btn) => btn.addEventListener("click", () => exportBuild(btn.dataset.exportBuild)));
+    listEl.querySelectorAll("[data-delete-build]").forEach((btn) => btn.addEventListener("click", () => {
+      const builds2 = loadSavedBuilds();
+      delete builds2[btn.dataset.deleteBuild];
+      saveSavedBuilds(builds2);
+      renderBuildsList();
+    }));
+  }
+  function exportBuild(name) {
+    const record = loadSavedBuilds()[name];
+    if (!record) return;
+    const payload = JSON.stringify({ name, savedAt: record.savedAt, data: record.data }, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (name.replace(/[^a-z0-9 _-]/gi, "").trim() || "build") + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  function importBuildFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      let parsed;
+      try { parsed = JSON.parse(reader.result); } catch (e) { return; }
+      // accept either an exported {name, savedAt, data} wrapper or a bare data object
+      const data = parsed && parsed.data && typeof parsed.data === "object" ? parsed.data : parsed;
+      if (!data || typeof data !== "object") return;
+      const baseName = (parsed && parsed.name) || file.name.replace(/\.json$/i, "") || "Imported Build";
+      const builds = loadSavedBuilds();
+      let name = baseName, n = 1;
+      while (builds[name]) { n += 1; name = baseName + " (" + n + ")"; }
+      builds[name] = { savedAt: new Date().toISOString(), data };
+      saveSavedBuilds(builds);
+      applyBuildData(data);
+      renderInventory();
+      renderBuildsList();
+    };
+    reader.readAsText(file);
+  }
+  document.getElementById("buildsBtn").addEventListener("click", () => {
+    renderBuildsList();
+    buildsDialog.showModal();
+    document.getElementById("buildSaveName").focus();
+  });
+  document.getElementById("buildsClose").addEventListener("click", () => buildsDialog.close());
+  document.getElementById("buildSaveBtn").addEventListener("click", () => {
+    const input = document.getElementById("buildSaveName");
+    const name = input.value.trim();
+    if (!name) return;
+    const builds = loadSavedBuilds();
+    builds[name] = { savedAt: new Date().toISOString(), data: serializeState() };
+    saveSavedBuilds(builds);
+    input.value = "";
+    renderBuildsList();
+  });
+  document.getElementById("buildSaveName").addEventListener("keydown", (e) => { if (e.key === "Enter") document.getElementById("buildSaveBtn").click(); });
+  document.getElementById("buildImportBtn").addEventListener("click", () => document.getElementById("buildImportFile").click());
+  document.getElementById("buildImportFile").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) importBuildFile(file);
+    e.target.value = "";
+  });
+
   function openSkillPicker(n) {
     const items = [...DATA.skills].sort((a, b) => a["Item Name"].localeCompare(b["Item Name"]) || a.Variant.localeCompare(b.Variant));
     openPicker("Select Skill", items, Engine.resolveSkill,
@@ -1712,11 +1845,15 @@
     }
     if (d.v != null) resolved[field].value = d.v;
   }
-  function restoreFromUrl() {
-    const m = location.hash.match(/^#b=(.+)$/);
-    if (!m) return;
-    let data;
-    try { data = JSON.parse(decodeURIComponent(m[1])); } catch (e) { return; }
+  // applies a serializeState()-shaped object onto state - shared by the URL hash restore,
+  // loading a saved build, and importing an exported build file, so all three stay in sync
+  // with each other for free.
+  function applyBuildData(data) {
+    // full replace, not a merge - a slot this data doesn't mention should end up empty, not
+    // keep whatever the previously-loaded build had there
+    state.weapons = {}; state.gear = {}; state.skills = {}; state.spec = null;
+    state.shd.forEach((l) => { l.value = 0; });
+    state.expertise = 30; state.gearExpertise = {}; state.weaponExpertise = {};
     WEAPON_SLOTS.forEach((s) => {
       const ref = data.w && data.w[s.key];
       if (!ref) return;
@@ -1780,9 +1917,16 @@
       Object.entries(data.gexp).forEach(([slot, v]) => { state.gearExpertise[slot] = Math.max(0, Math.min(30, Number(v))); });
     }
     if (data.wexp) {
-      state.weaponExpertise = {};
       Object.entries(data.wexp).forEach(([slot, v]) => { state.weaponExpertise[slot] = Math.max(0, Math.min(30, Number(v))); });
     }
+    saveSHD(); saveExpertise(); saveGearExpertise(); saveWeaponExpertise();
+  }
+  function restoreFromUrl() {
+    const m = location.hash.match(/^#b=(.+)$/);
+    if (!m) return;
+    let data;
+    try { data = JSON.parse(decodeURIComponent(m[1])); } catch (e) { return; }
+    applyBuildData(data);
   }
 
   restoreFromUrl();
