@@ -115,10 +115,14 @@
   .damage-panel .dp-base-label { font-size: 12.5px; color: var(--muted); }
   .damage-panel .dp-base-value { font-family: var(--font-mono); font-size: 15px; font-weight: 600; }
   .damage-panel .dp-group-label { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 10px 0 4px; }
-  .damage-panel .dp-row { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; cursor: pointer; }
-  .damage-panel .dp-row input { margin-top: 3px; flex-shrink: 0; accent-color: var(--accent); }
+  .damage-panel .dp-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; }
+  .damage-panel .dp-toggle { margin-left: auto; }
   .damage-panel .dp-row-label { font-size: 12.5px; line-height: 1.35; }
   .damage-panel .dp-row-amount { color: var(--red); font-family: var(--font-mono); }
+  .damage-panel .dp-pellet-input {
+    width: 52px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    font-family: var(--font-mono); font-size: 12px; padding: 3px 6px; text-align: right;
+  }
   .damage-panel .dp-result { display: flex; justify-content: space-between; align-items: baseline; padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--line); }
   .damage-panel .dp-result-label { font-size: 12.5px; color: var(--muted); }
   .damage-panel .dp-result-value { font-family: var(--font-mono); font-size: 17px; font-weight: 700; color: var(--accent); }
@@ -614,7 +618,7 @@
   // damage-projection panel toggle state (crit/headshot + one entry per active conditional
   // effect id below) - a what-if exploration layer, session-only, never persisted and never
   // fed back into the real computed stats.
-  state.damageToggles = { crit: false, headshot: false };
+  state.damageToggles = { crit: false, headshot: false, pellets: 0 };
   let summaryOpen = false;
   let attachExpanded = {}; // weapon slot key -> bool, session-only UI state
 
@@ -842,14 +846,18 @@
     Object.values(state.gear).forEach((g) => { if (g) checkTalent(g.talent, g.name); });
     return found;
   }
-  function computeProjectedDamage(p, effects) {
+  // toggles defaults to the real current state, but a caller can pass an override (e.g. the
+  // pellet split below forces crit on/off independently of the actual Critical Hit toggle,
+  // since each pellet rolls its own crit rather than the whole shot doing so)
+  function computeProjectedDamage(p, effects, toggles) {
+    toggles = toggles || state.damageToggles;
     let weaponDamagePct = p.totalPct;
     let critHeadshotPct = 0;
     let amplifyMultiplier = 1;
-    if (state.damageToggles.crit) critHeadshotPct += p.chd;
-    if (state.damageToggles.headshot) critHeadshotPct += p.hsd;
+    if (toggles.crit) critHeadshotPct += p.chd;
+    if (toggles.headshot) critHeadshotPct += p.hsd;
     effects.forEach((eff) => {
-      if (!state.damageToggles[eff.id]) return;
+      if (!toggles[eff.id]) return;
       if (eff.bucket === "weaponDamage") weaponDamagePct += eff.amount;
       else if (eff.bucket === "amplify") amplifyMultiplier *= (1 + eff.amount / 100);
     });
@@ -862,19 +870,38 @@
     const effects = findActiveConditionalEffects();
     const projected = computeProjectedDamage(p, effects);
     const bothOn = state.damageToggles.crit && state.damageToggles.headshot;
+    function toggleSwitch(attr, checked) {
+      return '<label class="toggle dp-toggle"><input type="checkbox" ' + attr + (checked ? " checked" : "") + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>';
+    }
+    // shotguns: each pellet rolls its own crit independently, so show both the crit and
+    // non-crit per-pellet number side by side regardless of whether the Critical Hit toggle
+    // above is on - that toggle is about the whole-hit projection, this is a separate split.
+    const pelletCount = state.damageToggles.pellets || 0;
+    let pelletHtml = "";
+    if (pelletCount > 0) {
+      const perPelletNonCrit = Math.round(computeProjectedDamage(p, effects, Object.assign({}, state.damageToggles, { crit: false })) / pelletCount);
+      const perPelletCrit = Math.round(computeProjectedDamage(p, effects, Object.assign({}, state.damageToggles, { crit: true })) / pelletCount);
+      pelletHtml =
+        '<div class="dp-row"><span class="dp-row-label">Non-Crit</span><span class="dp-base-value" style="font-size:13px">' + fmt(perPelletNonCrit) + '</span></div>' +
+        '<div class="dp-row"><span class="dp-row-label">Critical</span><span class="dp-base-value" style="font-size:13px">' + fmt(perPelletCrit) + '</span></div>';
+    }
     el.innerHTML =
       '<div class="dp-title">Damage Projection</div>' +
       '<div class="dp-base"><span class="dp-base-label">Weapon Damage</span><span class="dp-base-value">' + fmt(p.totalDamage) + '</span></div>' +
       '<div class="dp-group-label">Hit Type</div>' +
-      '<label class="dp-row"><input type="checkbox" id="dpCrit"' + (state.damageToggles.crit ? " checked" : "") + '><span class="dp-row-label">Critical Hit <span class="dp-row-amount">+' + Math.round(p.chd) + '%</span></span></label>' +
-      '<label class="dp-row"><input type="checkbox" id="dpHeadshot"' + (state.damageToggles.headshot ? " checked" : "") + '><span class="dp-row-label">Headshot <span class="dp-row-amount">+' + Math.round(p.hsd) + '%</span></span></label>' +
+      '<div class="dp-row"><span class="dp-row-label">Critical Hit <span class="dp-row-amount">+' + Math.round(p.chd) + '%</span></span>' + toggleSwitch('id="dpCrit"', state.damageToggles.crit) + '</div>' +
+      '<div class="dp-row"><span class="dp-row-label">Headshot <span class="dp-row-amount">+' + Math.round(p.hsd) + '%</span></span>' + toggleSwitch('id="dpHeadshot"', state.damageToggles.headshot) + '</div>' +
       (bothOn ? '<div class="dp-empty">Critical + Headshot stack in the same bucket.</div>' : "") +
+      '<div class="dp-group-label">Shotgun Pellets</div>' +
+      '<div class="dp-row"><span class="dp-row-label">Pellet Count</span><input type="number" id="dpPellets" class="dp-pellet-input" min="0" max="20" placeholder="—" value="' + (pelletCount || "") + '"></div>' +
+      pelletHtml +
       (effects.length ? '<div class="dp-group-label">Conditional Bonuses</div>' + effects.map((eff) =>
-        '<label class="dp-row"><input type="checkbox" data-dp-effect="' + eff.id + '"' + (state.damageToggles[eff.id] ? " checked" : "") + '><span class="dp-row-label">' + eff.label + ' <span class="dp-row-amount">+' + eff.amount + '%</span><br><span style="color:var(--muted);font-size:10.5px">' + eff.itemName + '</span></span></label>'
+        '<div class="dp-row"><span class="dp-row-label">' + eff.label + ' <span class="dp-row-amount">+' + eff.amount + '%</span><br><span style="color:var(--muted);font-size:10.5px">' + eff.itemName + '</span></span>' + toggleSwitch('data-dp-effect="' + eff.id + '"', state.damageToggles[eff.id]) + '</div>'
       ).join("") : "") +
       '<div class="dp-result"><span class="dp-result-label">Projected Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div>';
     document.getElementById("dpCrit").addEventListener("change", (e) => { state.damageToggles.crit = e.target.checked; renderDamagePanel(); });
     document.getElementById("dpHeadshot").addEventListener("change", (e) => { state.damageToggles.headshot = e.target.checked; renderDamagePanel(); });
+    document.getElementById("dpPellets").addEventListener("change", (e) => { state.damageToggles.pellets = Math.max(0, Number(e.target.value) || 0); renderDamagePanel(); });
     el.querySelectorAll("[data-dp-effect]").forEach((inp) => inp.addEventListener("change", (e) => {
       state.damageToggles[inp.dataset.dpEffect] = e.target.checked;
       renderDamagePanel();
