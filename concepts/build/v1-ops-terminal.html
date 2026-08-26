@@ -1072,7 +1072,7 @@
     if (mod.selectable) {
       const pool = Engine.weaponModPool(engineSlot, item.raw[rawCol]);
       identityHtml = '<select class="attach-select" data-attach-field="' + key + '" data-attach-slot="' + weaponKey + '">' +
-        pool.map((o, i) => '<option value="' + i + '"' + (o.Name === mod.name ? " selected" : "") + '>' + o.Name + '</option>').join("") +
+        pool.map((o, i) => '<option value="' + i + '"' + (o.Name === mod.name ? " selected" : "") + '>' + attachBonusText(o) + " (" + o.Name + ")" + '</option>').join("") +
         '</select>';
     } else {
       identityHtml = '<span class="roll-label-fixed">' + mod.name + '</span>';
