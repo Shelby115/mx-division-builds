@@ -385,7 +385,7 @@ window.Engine = (function () {
 
 				return {
 					weapon, baseDamage: weapon.baseDamage, totalPct, totalDamage, expertiseLevel: thisExpertise,
-					hsd, chd, chc, chcSources: chcExplain.sources,
+					hsd, chd, chc, chcSources: chcExplain.sources, dta, dtooc,
 					dmgToArmored: Math.round(totalDamage * (1 + dta / 100)),
 					dmgToOutOfCover: Math.round(totalDamage * (1 + dtooc / 100)),
 					rpm: weapon.rpm, magSize: weapon.magSize, totalMagSize, reloadSpeedMs, reloadSpeedPct,

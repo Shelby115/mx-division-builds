@@ -618,7 +618,7 @@
   // damage-projection panel toggle state (crit/headshot + one entry per active conditional
   // effect id below) - a what-if exploration layer, session-only, never persisted and never
   // fed back into the real computed stats.
-  state.damageToggles = { crit: false, headshot: false, pellets: 0 };
+  state.damageToggles = { crit: false, headshot: false, dta: false, dtooc: false, pellets: 0 };
   let summaryOpen = false;
   let attachExpanded = {}; // weapon slot key -> bool, session-only UI state
 
@@ -852,16 +852,21 @@
   function computeProjectedDamage(p, effects, toggles) {
     toggles = toggles || state.damageToggles;
     let weaponDamagePct = p.totalPct;
-    let critHeadshotPct = 0;
+    // Critical Hit Damage, Headshot Damage, Damage to Armor, and Damage to TOC are all the
+    // same class of conditional post-mitigation bonus - they combine additively in one
+    // bucket, then that bucket multiplies onto the base weapon-damage number.
+    let conditionalDamagePct = 0;
     let amplifyMultiplier = 1;
-    if (toggles.crit) critHeadshotPct += p.chd;
-    if (toggles.headshot) critHeadshotPct += p.hsd;
+    if (toggles.crit) conditionalDamagePct += p.chd;
+    if (toggles.headshot) conditionalDamagePct += p.hsd;
+    if (toggles.dta) conditionalDamagePct += p.dta;
+    if (toggles.dtooc) conditionalDamagePct += p.dtooc;
     effects.forEach((eff) => {
       if (!toggles[eff.id]) return;
       if (eff.bucket === "weaponDamage") weaponDamagePct += eff.amount;
       else if (eff.bucket === "amplify") amplifyMultiplier *= (1 + eff.amount / 100);
     });
-    return Math.round(p.baseDamage * (1 + weaponDamagePct / 100) * (1 + critHeadshotPct / 100) * amplifyMultiplier);
+    return Math.round(p.baseDamage * (1 + weaponDamagePct / 100) * (1 + conditionalDamagePct / 100) * amplifyMultiplier);
   }
   function renderDamagePanel() {
     const el = document.getElementById("damagePanel");
@@ -869,7 +874,7 @@
     if (!p) { el.innerHTML = ""; return; }
     const effects = findActiveConditionalEffects();
     const projected = computeProjectedDamage(p, effects);
-    const bothOn = state.damageToggles.crit && state.damageToggles.headshot;
+    const conditionalOnCount = ["crit", "headshot", "dta", "dtooc"].filter((k) => state.damageToggles[k]).length;
     function toggleSwitch(attr, checked) {
       return '<label class="toggle dp-toggle"><input type="checkbox" ' + attr + (checked ? " checked" : "") + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>';
     }
@@ -891,7 +896,10 @@
       '<div class="dp-group-label">Hit Type</div>' +
       '<div class="dp-row"><span class="dp-row-label">Critical Hit <span class="dp-row-amount">+' + Math.round(p.chd) + '%</span></span>' + toggleSwitch('id="dpCrit"', state.damageToggles.crit) + '</div>' +
       '<div class="dp-row"><span class="dp-row-label">Headshot <span class="dp-row-amount">+' + Math.round(p.hsd) + '%</span></span>' + toggleSwitch('id="dpHeadshot"', state.damageToggles.headshot) + '</div>' +
-      (bothOn ? '<div class="dp-empty">Critical + Headshot stack in the same bucket.</div>' : "") +
+      '<div class="dp-group-label">Target Damage</div>' +
+      '<div class="dp-row"><span class="dp-row-label">Damage to Armor <span class="dp-row-amount">+' + Math.round(p.dta) + '%</span></span>' + toggleSwitch('id="dpDta"', state.damageToggles.dta) + '</div>' +
+      '<div class="dp-row"><span class="dp-row-label">Damage to TOC <span class="dp-row-amount">+' + Math.round(p.dtooc) + '%</span></span>' + toggleSwitch('id="dpDtooc"', state.damageToggles.dtooc) + '</div>' +
+      (conditionalOnCount > 1 ? '<div class="dp-empty">Critical / Headshot / Damage to Armor / Damage to TOC all stack in the same bucket.</div>' : "") +
       '<div class="dp-group-label">Shotgun Pellets</div>' +
       '<div class="dp-row"><span class="dp-row-label">Pellet Count</span><input type="number" id="dpPellets" class="dp-pellet-input" min="0" max="20" placeholder="—" value="' + (pelletCount || "") + '"></div>' +
       pelletHtml +
@@ -901,6 +909,8 @@
       '<div class="dp-result"><span class="dp-result-label">Projected Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div>';
     document.getElementById("dpCrit").addEventListener("change", (e) => { state.damageToggles.crit = e.target.checked; renderDamagePanel(); });
     document.getElementById("dpHeadshot").addEventListener("change", (e) => { state.damageToggles.headshot = e.target.checked; renderDamagePanel(); });
+    document.getElementById("dpDta").addEventListener("change", (e) => { state.damageToggles.dta = e.target.checked; renderDamagePanel(); });
+    document.getElementById("dpDtooc").addEventListener("change", (e) => { state.damageToggles.dtooc = e.target.checked; renderDamagePanel(); });
     document.getElementById("dpPellets").addEventListener("change", (e) => { state.damageToggles.pellets = Math.max(0, Number(e.target.value) || 0); renderDamagePanel(); });
     el.querySelectorAll("[data-dp-effect]").forEach((inp) => inp.addEventListener("change", (e) => {
       state.damageToggles[inp.dataset.dpEffect] = e.target.checked;
