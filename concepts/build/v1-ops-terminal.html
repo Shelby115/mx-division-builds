@@ -342,6 +342,8 @@
     grid-template-columns: 1fr auto; gap: 4px 14px; align-items: start;
   }
   .pitem:hover { background: var(--panel-2); }
+  .pitem.pitem-info { cursor: default; }
+  .pitem.pitem-info:hover { background: none; }
   .pitem.q-Exotic { border-left-color: var(--q-exotic); }
   .pitem.q-Named { border-left-color: var(--q-named); }
   .pitem.q-Gearset { border-left-color: var(--q-gearset); }
@@ -369,7 +371,7 @@
       <button class="tab" data-screen="shd">SHD Watch</button>
     </div>
     <div class="topbar-actions">
-      <button class="btn-ghost" id="searchAllBtn">Search All Items</button>
+      <button class="btn-ghost" id="searchAllBtn">Search Everything</button>
       <button class="btn-ghost" id="buildsBtn">Saved Builds</button>
       <button class="btn-ghost" id="clearBtn">Clear Loadout</button>
     </div>
@@ -1333,8 +1335,11 @@
       const base = currentItems();
       const filtered = f ? base.filter((it) => corpusByItem.get(it).includes(f)) : base;
       const resolved = filtered.slice(0, 150).map(resolveFn);
-      listEl.innerHTML = resolved.length ? resolved.map((it, i) => '<div class="pitem' + (it.quality ? " q-" + qClass(it.quality) : "") + '" data-i="' + i + '">' + rowHtmlFn(it) + '</div>').join("") : '<div class="empty-note">No matches.</div>';
+      // __noClick: informational-only results (e.g. a talent that isn't itself an equippable
+      // item) - shown for reference, but picking one wouldn't have anything sensible to do
+      listEl.innerHTML = resolved.length ? resolved.map((it, i) => '<div class="pitem' + (it.quality ? " q-" + qClass(it.quality) : "") + (it.__noClick ? " pitem-info" : "") + '" data-i="' + i + '">' + rowHtmlFn(it) + '</div>').join("") : '<div class="empty-note">No matches.</div>';
       listEl.querySelectorAll(".pitem").forEach((elm) => {
+        if (resolved[+elm.dataset.i].__noClick) return;
         elm.addEventListener("click", (e) => { onPick(resolved[+elm.dataset.i], e); dialog.close(); renderInventory(); });
       });
     }
@@ -1394,17 +1399,51 @@
       saveGearExpertise();
     });
   }
-  // combined weapon+gear item, tagged so combinedResolve/combinedRowHtml/the onPick handler
-  // below know which underlying resolver/renderer/equip-slot it belongs to
+  // every kind searchable from the global dialog, tagged so combinedResolve/combinedRowHtml/
+  // the onPick handler below know which underlying resolver/renderer/equip-slot it belongs to.
+  // weapon/gear are real equippable items; skill/specialization are equippable in their own
+  // slots; weaponTalent/gearTalent are the general recalibratable talent pool itself (not
+  // tied to one item) - informational only, so a "mechanic" can be found even when it isn't
+  // fixed onto any single card's displayed talent.
+  function qualityCodeName(code) { return code === "E" ? "Exotic" : code === "N" ? "Named" : code === "S" ? "Gearset" : "High End"; }
   function combinedResolve(wrapped) {
-    const resolved = wrapped.kind === "weapon" ? Engine.resolveWeapon(wrapped.raw) : Engine.resolveGear(wrapped.raw);
-    resolved.__kind = wrapped.kind;
-    resolved.__gearSlot = wrapped.gearSlot;
-    return resolved;
+    if (wrapped.kind === "weapon") { const r = Engine.resolveWeapon(wrapped.raw); r.__kind = "weapon"; return r; }
+    if (wrapped.kind === "gear") { const r = Engine.resolveGear(wrapped.raw); r.__kind = "gear"; r.__gearSlot = wrapped.gearSlot; return r; }
+    if (wrapped.kind === "skill") { const r = Engine.resolveSkill(wrapped.raw); r.__kind = "skill"; return r; }
+    if (wrapped.kind === "specialization") { return Object.assign({}, wrapped.raw, { __kind: "specialization" }); }
+    if (wrapped.kind === "weaponTalent") {
+      const raw = wrapped.raw;
+      const on = DATA.weapons.filter((w) => w.Talent === raw.Name).map((w) => w.Name);
+      return {
+        __kind: "weaponTalent", __noClick: true, name: raw.Name, desc: raw.Desc,
+        quality: qualityCodeName(raw.Quality), qualityCode: raw.Quality,
+        rollsOn: on.length ? "Rolls on: " + on.slice(0, 6).join(", ") + (on.length > 6 ? " +" + (on.length - 6) + " more" : "") : "Recalibration only",
+      };
+    }
+    // gearTalent
+    const raw = wrapped.raw;
+    const on = (DATA.gear[raw.Slot] || []).filter((g) => g.Talent === raw.Talent).map((g) => g["Item Name"]);
+    return {
+      __kind: "gearTalent", __noClick: true, name: raw.Talent, desc: raw.Desc,
+      quality: qualityCodeName(raw.Quality), qualityCode: raw.Quality,
+      rollsOn: on.length ? "Rolls on " + raw.Slot.toLowerCase() + ": " + on.slice(0, 6).join(", ") + (on.length > 6 ? " +" + (on.length - 6) + " more" : "") : "Recalibration only",
+    };
   }
   function combinedRowHtml(resolved) {
-    const kindLabel = resolved.__kind === "weapon" ? resolved.weaponType : resolved.__gearSlot;
-    return '<span class="pi-kind">' + kindLabel + '</span>' + (resolved.__kind === "weapon" ? weaponRowHtml(resolved) : gearRowHtml(resolved));
+    if (resolved.__kind === "weapon") return '<span class="pi-kind">' + resolved.weaponType + '</span>' + weaponRowHtml(resolved);
+    if (resolved.__kind === "gear") return '<span class="pi-kind">' + resolved.__gearSlot + '</span>' + gearRowHtml(resolved);
+    if (resolved.__kind === "skill") {
+      return '<span class="pi-kind">Skill</span><span class="piname">' + resolved.name + ' (' + resolved.variant + ')</span><span class="piquality"></span>' +
+        (resolved.desc ? '<span class="pitalent"><span class="tt-desc">' + compactDesc(resolved.desc) + '</span></span>' : "");
+    }
+    if (resolved.__kind === "specialization") {
+      return '<span class="pi-kind">Specialization</span><span class="piname">' + resolved.name + '</span><span class="piquality"></span>' +
+        '<span class="piattrs">' + resolved.perks.map((p) => p.stat + " +" + p.val).join(", ") + '</span>';
+    }
+    const kindLabel = resolved.__kind === "weaponTalent" ? "Weapon Talent" : "Gear Talent";
+    return '<span class="pi-kind">' + kindLabel + '</span><span class="piname">' + resolved.name + '</span><span class="piquality">' + resolved.qualityCode + '</span>' +
+      '<span class="pitalent"><span class="tt-desc">' + compactDesc(resolved.desc) + '</span></span>' +
+      '<span class="piattrs">' + resolved.rollsOn + '</span>';
   }
   // a weapon from the global search has no fixed destination slot the way a per-slot picker
   // does - route it to the right slot type automatically: sidearms always go to SideArm;
@@ -1425,16 +1464,34 @@
     GEAR_SLOTS.forEach((s) => {
       DATA.gear[s.key].forEach((raw) => { if (!noExoticGear || raw.Quality !== "Exotic") items.push({ kind: "gear", gearSlot: s.key, raw }); });
     });
+    DATA.skills.forEach((raw) => items.push({ kind: "skill", raw }));
+    DATA.specialization.forEach((raw) => items.push({ kind: "specialization", raw }));
+    DATA.weaponTalents.forEach((raw) => items.push({ kind: "weaponTalent", raw }));
+    DATA.gearTalents.forEach((raw) => items.push({ kind: "gearTalent", raw }));
     const categories = [...WEAPON_TYPES, ...GEAR_SLOTS.map((s) => s.key)];
-    openPicker("Search All Items", items, combinedResolve, combinedRowHtml, (picked) => {
+    openPicker("Search Everything", items, combinedResolve, combinedRowHtml, (picked) => {
       if (picked.__kind === "weapon") {
         equipWeaponSmart(picked);
-      } else {
+      } else if (picked.__kind === "gear") {
         state.gear[picked.__gearSlot] = picked;
         delete state.gearExpertise[picked.__gearSlot];
         saveGearExpertise();
+      } else if (picked.__kind === "skill") {
+        const target = !state.skills[1] ? 1 : !state.skills[2] ? 2 : 1;
+        state.skills[target] = picked;
+      } else if (picked.__kind === "specialization") {
+        state.spec = picked.name;
       }
-    }, { categories, categorize: (wrapped) => wrapped.kind === "weapon" ? wrapped.raw["Weapon Type"] : wrapped.gearSlot });
+      // weaponTalent/gearTalent results are __noClick, so onPick never runs for them
+    }, {
+      categories,
+      categorize: (wrapped) => {
+        if (wrapped.kind === "weapon") return wrapped.raw["Weapon Type"];
+        if (wrapped.kind === "gear") return wrapped.gearSlot;
+        if (wrapped.kind === "gearTalent") return wrapped.raw.Slot;
+        return null; // skill, specialization, weaponTalent: only show up under "All"
+      },
+    });
   }
   document.getElementById("searchAllBtn").addEventListener("click", openGlobalSearch);
 
@@ -1534,7 +1591,7 @@
   function openSkillPicker(n) {
     const items = [...DATA.skills].sort((a, b) => a["Item Name"].localeCompare(b["Item Name"]) || a.Variant.localeCompare(b.Variant));
     openPicker("Select Skill", items, Engine.resolveSkill,
-      (s) => '<span class="piname">' + s.name + ' (' + s.variant + ')</span><span class="piquality"></span>' + (s.desc ? '<span class="piattrs">' + s.desc.slice(0, 90) + '…</span>' : ""),
+      (s) => '<span class="piname">' + s.name + ' (' + s.variant + ')</span><span class="piquality"></span>' + (s.desc ? '<span class="pitalent"><span class="tt-desc">' + compactDesc(s.desc) + '</span></span>' : ""),
       (s) => { state.skills[n] = s; });
   }
   function openSpecPicker() {
