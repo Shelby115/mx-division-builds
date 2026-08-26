@@ -334,6 +334,7 @@
   .pitem.q-Named { border-left-color: var(--q-named); }
   .pitem.q-Gearset { border-left-color: var(--q-gearset); }
   .pitem.q-HighEnd { border-left-color: var(--q-highend); }
+  .pitem .pi-kind { grid-column: 1 / -1; font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
   .pitem .piname { font-weight: 600; font-size: 14.5px; }
   .pitem .piquality { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
   .pitem .piattrs { grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
@@ -356,6 +357,7 @@
       <button class="tab" data-screen="shd">SHD Watch</button>
     </div>
     <div class="topbar-actions">
+      <button class="btn-ghost" id="searchAllBtn">Search All Items</button>
       <button class="btn-ghost" id="clearBtn">Clear Loadout</button>
     </div>
   </nav>
@@ -1353,6 +1355,49 @@
       saveGearExpertise();
     });
   }
+  // combined weapon+gear item, tagged so combinedResolve/combinedRowHtml/the onPick handler
+  // below know which underlying resolver/renderer/equip-slot it belongs to
+  function combinedResolve(wrapped) {
+    const resolved = wrapped.kind === "weapon" ? Engine.resolveWeapon(wrapped.raw) : Engine.resolveGear(wrapped.raw);
+    resolved.__kind = wrapped.kind;
+    resolved.__gearSlot = wrapped.gearSlot;
+    return resolved;
+  }
+  function combinedRowHtml(resolved) {
+    const kindLabel = resolved.__kind === "weapon" ? resolved.weaponType : resolved.__gearSlot;
+    return '<span class="pi-kind">' + kindLabel + '</span>' + (resolved.__kind === "weapon" ? weaponRowHtml(resolved) : gearRowHtml(resolved));
+  }
+  // a weapon from the global search has no fixed destination slot the way a per-slot picker
+  // does - route it to the right slot type automatically: sidearms always go to SideArm;
+  // everything else prefers an empty Primary, then an empty Secondary, else overwrites Primary.
+  function equipWeaponSmart(w) {
+    const target = w.slot === "S" ? "SideArm" : !state.weapons.Primary ? "Primary" : !state.weapons.Secondary ? "Secondary" : "Primary";
+    state.weapons[target] = w;
+    delete state.weaponExpertise[target];
+    saveWeaponExpertise();
+  }
+  function openGlobalSearch() {
+    // an Exotic already equipped (anywhere) rules out equipping a second one via this picker,
+    // same restriction the per-slot pickers enforce
+    const noExoticWeapons = hasExoticWeaponElsewhere(null);
+    const noExoticGear = hasExoticGearElsewhere(null);
+    const items = [];
+    DATA.weapons.forEach((raw) => { if (!noExoticWeapons || raw.Quality !== "Exotic") items.push({ kind: "weapon", raw }); });
+    GEAR_SLOTS.forEach((s) => {
+      DATA.gear[s.key].forEach((raw) => { if (!noExoticGear || raw.Quality !== "Exotic") items.push({ kind: "gear", gearSlot: s.key, raw }); });
+    });
+    const categories = [...WEAPON_TYPES, ...GEAR_SLOTS.map((s) => s.key)];
+    openPicker("Search All Items", items, combinedResolve, combinedRowHtml, (picked) => {
+      if (picked.__kind === "weapon") {
+        equipWeaponSmart(picked);
+      } else {
+        state.gear[picked.__gearSlot] = picked;
+        delete state.gearExpertise[picked.__gearSlot];
+        saveGearExpertise();
+      }
+    }, { categories, categorize: (wrapped) => wrapped.kind === "weapon" ? wrapped.raw["Weapon Type"] : wrapped.gearSlot });
+  }
+  document.getElementById("searchAllBtn").addEventListener("click", openGlobalSearch);
   function openSkillPicker(n) {
     const items = [...DATA.skills].sort((a, b) => a["Item Name"].localeCompare(b["Item Name"]) || a.Variant.localeCompare(b.Variant));
     openPicker("Select Skill", items, Engine.resolveSkill,
