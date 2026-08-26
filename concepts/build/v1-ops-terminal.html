@@ -752,6 +752,13 @@
           ["Total Armor", fmt(result.totals.armor)],
           ["Health", fmt(result.totals.health)],
           ["Armor Cores Equipped", result.stats.Cores.Defensive.length],
+          ["Effective Armor Regen", (() => {
+            const flatRegen = result.stats.Defensive["Armor Regeneration"] || 0;
+            const pctRegen = result.stats.Defensive["Armor Regeneration %"] || 0;
+            if (!flatRegen && !pctRegen) return "—";
+            const effective = flatRegen * (1 + pctRegen / 100);
+            return fmt(effective) + (pctRegen ? " (" + fmt(flatRegen) + " base, +" + (Math.round(pctRegen * 10) / 10) + "%)" : "");
+          })()],
         ],
       },
       {
