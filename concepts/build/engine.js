@@ -247,6 +247,20 @@ window.Engine = (function () {
 				});
 			});
 
+			// The Investor (exotic mask): grants a bonus per secondary attribute equipped on it,
+			// keyed by that attribute's color - +10% Critical Hit Damage per red (O), +5% Skill
+			// Efficiency per yellow (U), +1% Armor Regeneration % per blue (D). Always active
+			// (the condition - having secondary attributes at all - can't not be true) and
+			// scales live with whatever the player has actually picked for those 3 slots.
+			const investor = loadout.gear && loadout.gear.Mask && loadout.gear.Mask.name === "Investor" ? loadout.gear.Mask : null;
+			if (investor) {
+				const perColor = { O: 0, D: 0, U: 0 };
+				[investor.attribute1, investor.attribute2, investor.attribute3].forEach((a) => { if (a) perColor[a.Type] = (perColor[a.Type] || 0) + 1; });
+				if (perColor.O) add(stats.Offensive, "Critical Hit Damage", perColor.O * 10, "Investor (Slotted)");
+				if (perColor.U) add(stats.Utility, "Skill Efficiency", perColor.U * 5, "Investor (Slotted)");
+				if (perColor.D) add(stats.Defensive, "Armor Regeneration %", perColor.D * 1, "Investor (Slotted)");
+			}
+
 			// NinjaBike Messenger Bag: every other equipped brand/gearset counts as if it had
 			// one extra piece, for bonus-tier purposes only (doesn't add a real piece).
 			const ninjaBikeEquipped = !!(loadout.gear && loadout.gear.Backpack && loadout.gear.Backpack.name === "NinjaBike Messenger Bag");
