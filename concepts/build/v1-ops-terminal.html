@@ -102,6 +102,28 @@
   .quality-strip .qs-attr .qs-label { color: var(--muted); }
   .quality-strip .qs-attr .qs-item { color: var(--text); }
 
+  /* ---------- damage projection panel: crit/headshot/conditional-bonus toggles ---------- */
+  .damage-panel {
+    background: var(--panel); border: 1px solid var(--line); padding: 14px 16px; width: 260px;
+  }
+  .damage-panel:empty { display: none; }
+  @media (min-width: 1560px) {
+    .damage-panel { position: fixed; top: 90px; right: max(16px, calc((100vw - 1320px) / 2 - 276px)); max-height: 78vh; overflow-y: auto; z-index: 5; }
+  }
+  .damage-panel .dp-title { font-family: var(--font-display); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 10px; }
+  .damage-panel .dp-base { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+  .damage-panel .dp-base-label { font-size: 12.5px; color: var(--muted); }
+  .damage-panel .dp-base-value { font-family: var(--font-mono); font-size: 15px; font-weight: 600; }
+  .damage-panel .dp-group-label { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 10px 0 4px; }
+  .damage-panel .dp-row { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; cursor: pointer; }
+  .damage-panel .dp-row input { margin-top: 3px; flex-shrink: 0; accent-color: var(--accent); }
+  .damage-panel .dp-row-label { font-size: 12.5px; line-height: 1.35; }
+  .damage-panel .dp-row-amount { color: var(--red); font-family: var(--font-mono); }
+  .damage-panel .dp-result { display: flex; justify-content: space-between; align-items: baseline; padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--line); }
+  .damage-panel .dp-result-label { font-size: 12.5px; color: var(--muted); }
+  .damage-panel .dp-result-value { font-family: var(--font-mono); font-size: 17px; font-weight: 700; color: var(--accent); }
+  .damage-panel .dp-empty { font-size: 12px; color: var(--muted); padding: 4px 0; }
+
   /* ---------- loadout-wide settings: expertise stepper + SHD watch toggle ---------- */
   .loadout-settings { display: flex; flex-wrap: wrap; gap: 2px; background: var(--line); border: 1px solid var(--line); }
   .setting-card { flex: 1 1 240px; background: var(--panel); padding: 11px 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
@@ -383,6 +405,7 @@
         <div class="stat-chips" id="statChips"></div>
         <div class="stat-details" id="statDetails"></div>
       </div>
+      <div class="damage-panel" id="damagePanel"></div>
       <div class="quality-strip" id="qualityStrip"></div>
       <div class="quality-strip" id="attributeStrip"></div>
       <div class="loadout-settings">
@@ -588,6 +611,10 @@
   }
 
   const state = { weapons: {}, gear: {}, skills: {}, spec: null, shd: loadSHD(), expertise: loadExpertise(), gearExpertise: loadGearExpertise(), weaponExpertise: loadWeaponExpertise() };
+  // damage-projection panel toggle state (crit/headshot + one entry per active conditional
+  // effect id below) - a what-if exploration layer, session-only, never persisted and never
+  // fed back into the real computed stats.
+  state.damageToggles = { crit: false, headshot: false };
   let summaryOpen = false;
   let attachExpanded = {}; // weapon slot key -> bool, session-only UI state
 
@@ -778,6 +805,79 @@
     document.querySelectorAll("[data-chip]").forEach((el) => el.addEventListener("click", () => {
       summaryOpen = !summaryOpen;
       renderStatSummary();
+    }));
+  }
+
+  // =================== DAMAGE PROJECTION PANEL ===================
+  // a what-if layer on top of the already-correct Weapon Damage number - never touches the
+  // real computed stats. Bucket rules (per real game mechanics): Critical Hit Damage and
+  // Headshot Damage share one bucket (additive with each other, then that combined bucket
+  // multiplies onto the base weapon-damage number); every other conditional bonus found here
+  // is its own independent multiplicative "amplify" bucket, even two bonuses from the same
+  // talent - they never sum together.
+  //
+  // CONDITIONAL_TALENT_EFFECTS is a hand-curated registry, keyed by exact talent name, grown
+  // opportunistically talent by talent rather than attempted for the whole ~200-entry pool at
+  // once - most talents are either flavor text with no player-facing damage bonus, or (like
+  // Septic Shock) a debuff applied to the enemy that reads as a flat damage amplification
+  // from the player's side, since there's no formula difference between the two.
+  const CONDITIONAL_TALENT_EFFECTS = {
+    "Septic Shock": [{ id: "septic-shock", label: "8+ Venom stacks (target takes bonus damage)", bucket: "amplify", amount: 20 }],
+  };
+  function findActiveConditionalEffects() {
+    const found = [];
+    const seenIds = new Set();
+    function checkTalent(talent, itemName) {
+      if (!talent) return;
+      const effects = CONDITIONAL_TALENT_EFFECTS[talent.Talent || talent.Name];
+      if (!effects) return;
+      effects.forEach((eff) => {
+        const id = eff.id + ":" + itemName; // distinct toggle per item, in the rare case the same talent shows up twice
+        if (seenIds.has(id)) return;
+        seenIds.add(id);
+        found.push(Object.assign({}, eff, { id, itemName }));
+      });
+    }
+    Object.values(state.weapons).forEach((w) => { if (w) checkTalent(w.talent, w.name); });
+    Object.values(state.gear).forEach((g) => { if (g) checkTalent(g.talent, g.name); });
+    return found;
+  }
+  function computeProjectedDamage(p, effects) {
+    let weaponDamagePct = p.totalPct;
+    let critHeadshotPct = 0;
+    let amplifyMultiplier = 1;
+    if (state.damageToggles.crit) critHeadshotPct += p.chd;
+    if (state.damageToggles.headshot) critHeadshotPct += p.hsd;
+    effects.forEach((eff) => {
+      if (!state.damageToggles[eff.id]) return;
+      if (eff.bucket === "weaponDamage") weaponDamagePct += eff.amount;
+      else if (eff.bucket === "amplify") amplifyMultiplier *= (1 + eff.amount / 100);
+    });
+    return Math.round(p.baseDamage * (1 + weaponDamagePct / 100) * (1 + critHeadshotPct / 100) * amplifyMultiplier);
+  }
+  function renderDamagePanel() {
+    const el = document.getElementById("damagePanel");
+    const p = computeCurrent().weaponStats.Primary;
+    if (!p) { el.innerHTML = ""; return; }
+    const effects = findActiveConditionalEffects();
+    const projected = computeProjectedDamage(p, effects);
+    const bothOn = state.damageToggles.crit && state.damageToggles.headshot;
+    el.innerHTML =
+      '<div class="dp-title">Damage Projection</div>' +
+      '<div class="dp-base"><span class="dp-base-label">Weapon Damage</span><span class="dp-base-value">' + fmt(p.totalDamage) + '</span></div>' +
+      '<div class="dp-group-label">Hit Type</div>' +
+      '<label class="dp-row"><input type="checkbox" id="dpCrit"' + (state.damageToggles.crit ? " checked" : "") + '><span class="dp-row-label">Critical Hit <span class="dp-row-amount">+' + Math.round(p.chd) + '%</span></span></label>' +
+      '<label class="dp-row"><input type="checkbox" id="dpHeadshot"' + (state.damageToggles.headshot ? " checked" : "") + '><span class="dp-row-label">Headshot <span class="dp-row-amount">+' + Math.round(p.hsd) + '%</span></span></label>' +
+      (bothOn ? '<div class="dp-empty">Critical + Headshot stack in the same bucket.</div>' : "") +
+      (effects.length ? '<div class="dp-group-label">Conditional Bonuses</div>' + effects.map((eff) =>
+        '<label class="dp-row"><input type="checkbox" data-dp-effect="' + eff.id + '"' + (state.damageToggles[eff.id] ? " checked" : "") + '><span class="dp-row-label">' + eff.label + ' <span class="dp-row-amount">+' + eff.amount + '%</span><br><span style="color:var(--muted);font-size:10.5px">' + eff.itemName + '</span></span></label>'
+      ).join("") : "") +
+      '<div class="dp-result"><span class="dp-result-label">Projected Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div>';
+    document.getElementById("dpCrit").addEventListener("change", (e) => { state.damageToggles.crit = e.target.checked; renderDamagePanel(); });
+    document.getElementById("dpHeadshot").addEventListener("change", (e) => { state.damageToggles.headshot = e.target.checked; renderDamagePanel(); });
+    el.querySelectorAll("[data-dp-effect]").forEach((inp) => inp.addEventListener("change", (e) => {
+      state.damageToggles[inp.dataset.dpEffect] = e.target.checked;
+      renderDamagePanel();
     }));
   }
 
@@ -1252,7 +1352,7 @@
     el.querySelectorAll("[data-skill]").forEach((elm) => elm.addEventListener("click", () => openSkillPicker(elm.dataset.skill)));
   }
 
-  function renderInventory() { renderStatSummary(); renderAttributeStrip(); renderQualityStrip(); renderLoadoutSettings(); renderWeaponGrid(); renderGearGrid(); renderSkillGrid(); renderDepthTables(); updateUrl(); }
+  function renderInventory() { renderStatSummary(); renderDamagePanel(); renderAttributeStrip(); renderQualityStrip(); renderLoadoutSettings(); renderWeaponGrid(); renderGearGrid(); renderSkillGrid(); renderDepthTables(); updateUrl(); }
 
   // =================== PICKER (shared, with real resolved attributes shown) ===================
   const dialog = document.getElementById("pickerDialog");
