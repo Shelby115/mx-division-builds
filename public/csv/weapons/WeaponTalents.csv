@@ -33,7 +33,7 @@ A,Steady Handed,x,x,x,x,x,x,x,"Hits grant a stack of +1% Accuracy and Stability.
 A,Strained,x,x,x,x,x,x,x,Gain +10% critical hit damage for every 0.5s you are firing. Stacks up to 5 times.,,
 A,Unhinged,,,,,x,,,Grants +18% weapon damage at the cost of -25% Stability and -25% Accuracy.,Weapon Damage,18
 A,Unwavering,,,,x,,,,Swapping to this weapon grants +300% weapon handling for 5s. Kills refresh the buff. Swapping away disables this from all weapons for 5s.,,
-A,Vindictive,x,x,x,x,x,x,x,Killing an enemy with a status effect applied grants you and all allies within 15m 15% critical hit chance and 15% critical hit damage for 20s.,,
+A,Vindictive,x,x,x,x,x,x,x,Killing an enemy with a status effect applied grants you and all allies within 15m 16% critical hit chance and 16% critical hit damage for 20s.,,
 E,Electromagnetic Accelerator,,,,,,,,Shots fired deal 0-100% weapon damage based on how long the trigger is held before releasing.,,
 E,Big Game Hunter,,,,,,,,"When Scoped, switches to semi-automatic fire mode, dealing 450% weapon damage with each shot. 
 
@@ -117,7 +117,7 @@ N,Perfect Salvage,,,,,,,,Killing a target has a +85% chance to refill the magazi
 N,Perfect Spike,,,,,,,,Headshots grant +25% skill damage for 15s.,,
 N,Perfect Strained,,,,,,,,Gain +10% critical hit damage for every 0.5s you are firing. Stacks up to 8 times.,,
 N,Perfect Unwavering,,,,,,,,Swapping to this weapon grants +400% weapon handling for 5s. Kills refresh the buff. Swapping away disables this from all weapons for 5s.,,
-N,Perfect Vindictive,,,,,,,,Killing an enemy with a status effect applied grants you and all allies within 20m 18% critical hit chance and 18% critical hit damage for 20s.,,
+N,Perfect Vindictive,,,,,,,,Killing an enemy with a status effect applied grants you and all allies within 20m 21% critical hit chance and 21% critical hit damage for 20s.,,
 N,Perfectly Accurate,,,,,,,,+80% accuracy.,,
 N,Perfectly Close & Personal,,,,,,,,Killing a target within 7m grants +38% weapon damage for 10s.,,
 N,Perfectly Extra,,,,,,,,+50% magazine capacity.,,
