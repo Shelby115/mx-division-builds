@@ -618,7 +618,7 @@
   // damage-projection panel toggle state (crit/headshot + one entry per active conditional
   // effect id below) - a what-if exploration layer, session-only, never persisted and never
   // fed back into the real computed stats.
-  state.damageToggles = { crit: false, headshot: false, dta: false, dtooc: false, pellets: 0 };
+  state.damageToggles = { crit: false, headshot: false, dta: false, dtooc: false, pellets: 0, tippingScalesStacks: 0 };
   let summaryOpen = false;
   let attachExpanded = {}; // weapon slot key -> bool, session-only UI state
 
@@ -828,6 +828,17 @@
   const CONDITIONAL_TALENT_EFFECTS = {
     "Septic Shock": [{ id: "septic-shock", label: "8+ Venom stacks (target takes bonus damage)", bucket: "amplify", amount: 20 }],
   };
+  // Tipping Scales' 3pc talent (Throttle Control) isn't a per-item Talent field like the
+  // registry above - it's a brand-tier bonus that only exists once 3+ pieces are equipped, so
+  // it needs its own detection instead of going through findActiveConditionalEffects. The Chest
+  // piece's own talent (Sustainability) is fixed - it's the only variant of that item - so its
+  // presence just means the max stack cap is 75 instead of 50.
+  function tippingScalesActive() {
+    const pieces = Object.values(state.gear || {}).filter((g) => g && g.name === "Tipping Scales");
+    if (pieces.length < 3) return null;
+    const maxStacks = (state.gear.Chest && state.gear.Chest.name === "Tipping Scales") ? 75 : 50;
+    return { maxStacks };
+  }
   function findActiveConditionalEffects() {
     const found = [];
     const seenIds = new Set();
@@ -860,7 +871,12 @@
     let dtaMultiplier = 1;
     let dtoocMultiplier = 1;
     let amplifyMultiplier = 1;
-    if (toggles.crit) conditionalDamagePct += p.chd;
+    // Tipping Scales' Throttle Control stacks grant flat Critical Hit Damage, same stat as
+    // p.chd - it only matters on an actual crit, so it rides along with the Critical Hit
+    // toggle rather than getting its own bucket.
+    const ts = tippingScalesActive();
+    const stackCHD = ts ? Math.min(toggles.tippingScalesStacks || 0, ts.maxStacks) * 4 : 0;
+    if (toggles.crit) conditionalDamagePct += p.chd + stackCHD;
     if (toggles.headshot) conditionalDamagePct += p.hsd;
     if (toggles.dta) dtaMultiplier = 1 + p.dta / 100;
     if (toggles.dtooc) dtoocMultiplier = 1 + p.dtooc / 100;
@@ -884,14 +900,35 @@
     // shotguns: each pellet rolls its own crit independently, so show both the crit and
     // non-crit per-pellet number side by side regardless of whether the Critical Hit toggle
     // above is on - that toggle is about the whole-hit projection, this is a separate split.
-    const pelletCount = state.damageToggles.pellets || 0;
-    let pelletHtml = "";
-    if (pelletCount > 0) {
-      const perPelletNonCrit = Math.round(computeProjectedDamage(p, effects, Object.assign({}, state.damageToggles, { crit: false })) / pelletCount);
-      const perPelletCrit = Math.round(computeProjectedDamage(p, effects, Object.assign({}, state.damageToggles, { crit: true })) / pelletCount);
-      pelletHtml =
-        '<div class="dp-row"><span class="dp-row-label">Non-Crit</span><span class="dp-base-value" style="font-size:13px">' + fmt(perPelletNonCrit) + '</span></div>' +
-        '<div class="dp-row"><span class="dp-row-label">Critical</span><span class="dp-base-value" style="font-size:13px">' + fmt(perPelletCrit) + '</span></div>';
+    const isShotgun = p.weapon && p.weapon.weaponType === "Shotgun";
+    const pelletCount = isShotgun ? (state.damageToggles.pellets || 0) : 0;
+    let pelletGroupHtml = "";
+    if (isShotgun) {
+      let pelletHtml = "";
+      if (pelletCount > 0) {
+        const perPelletNonCrit = Math.round(computeProjectedDamage(p, effects, Object.assign({}, state.damageToggles, { crit: false })) / pelletCount);
+        const perPelletCrit = Math.round(computeProjectedDamage(p, effects, Object.assign({}, state.damageToggles, { crit: true })) / pelletCount);
+        pelletHtml =
+          '<div class="dp-row"><span class="dp-row-label">Non-Crit</span><span class="dp-base-value" style="font-size:13px">' + fmt(perPelletNonCrit) + '</span></div>' +
+          '<div class="dp-row"><span class="dp-row-label">Critical</span><span class="dp-base-value" style="font-size:13px">' + fmt(perPelletCrit) + '</span></div>';
+      }
+      pelletGroupHtml =
+        '<div class="dp-group-label">Shotgun Pellets</div>' +
+        '<div class="dp-row"><span class="dp-row-label">Pellet Count</span><input type="number" id="dpPellets" class="dp-pellet-input" min="0" max="20" placeholder="—" value="' + (pelletCount || "") + '"></div>' +
+        pelletHtml;
+    }
+    const tippingScales = tippingScalesActive();
+    let tippingScalesHtml = "";
+    if (tippingScales) {
+      const stacks = Math.min(state.damageToggles.tippingScalesStacks || 0, tippingScales.maxStacks);
+      tippingScalesHtml =
+        '<div class="dp-group-label">Tipping Scales Stacks</div>' +
+        '<div class="dp-row"><span class="dp-row-label">Stack Count (max ' + tippingScales.maxStacks + ')</span><input type="number" id="dpTippingStacks" class="dp-pellet-input" min="0" max="' + tippingScales.maxStacks + '" placeholder="—" value="' + (stacks || "") + '"></div>' +
+        (stacks > 0 ?
+          '<div class="dp-row"><span class="dp-row-label">Weapon Handling</span><span class="dp-row-amount">+' + (stacks * 0.5) + '%</span></div>' +
+          '<div class="dp-row"><span class="dp-row-label">Critical Hit Damage</span><span class="dp-row-amount">+' + (stacks * 4) + '%</span></div>' +
+          '<div class="dp-empty">Adds to the Critical Hit bucket above - only counts while Critical Hit is toggled on. Weapon Handling doesn\'t affect damage, shown for reference only.</div>'
+        : "");
     }
     el.innerHTML =
       '<div class="dp-title">Damage Projection</div>' +
@@ -904,9 +941,8 @@
       '<div class="dp-row"><span class="dp-row-label">Damage to Armor <span class="dp-row-amount">+' + Math.round(p.dta) + '%</span></span>' + toggleSwitch('id="dpDta"', state.damageToggles.dta) + '</div>' +
       '<div class="dp-row"><span class="dp-row-label">Damage to TOC <span class="dp-row-amount">+' + Math.round(p.dtooc) + '%</span></span>' + toggleSwitch('id="dpDtooc"', state.damageToggles.dtooc) + '</div>' +
       '<div class="dp-empty">Damage to Armor and Damage to TOC each apply as their own independent multiplier.</div>' +
-      '<div class="dp-group-label">Shotgun Pellets</div>' +
-      '<div class="dp-row"><span class="dp-row-label">Pellet Count</span><input type="number" id="dpPellets" class="dp-pellet-input" min="0" max="20" placeholder="—" value="' + (pelletCount || "") + '"></div>' +
-      pelletHtml +
+      pelletGroupHtml +
+      tippingScalesHtml +
       (effects.length ? '<div class="dp-group-label">Conditional Bonuses</div>' + effects.map((eff) =>
         '<div class="dp-row"><span class="dp-row-label">' + eff.label + ' <span class="dp-row-amount">+' + eff.amount + '%</span><br><span style="color:var(--muted);font-size:10.5px">' + eff.itemName + '</span></span>' + toggleSwitch('data-dp-effect="' + eff.id + '"', state.damageToggles[eff.id]) + '</div>'
       ).join("") : "") +
@@ -915,7 +951,14 @@
     document.getElementById("dpHeadshot").addEventListener("change", (e) => { state.damageToggles.headshot = e.target.checked; renderDamagePanel(); });
     document.getElementById("dpDta").addEventListener("change", (e) => { state.damageToggles.dta = e.target.checked; renderDamagePanel(); });
     document.getElementById("dpDtooc").addEventListener("change", (e) => { state.damageToggles.dtooc = e.target.checked; renderDamagePanel(); });
-    document.getElementById("dpPellets").addEventListener("change", (e) => { state.damageToggles.pellets = Math.max(0, Number(e.target.value) || 0); renderDamagePanel(); });
+    const dpPellets = document.getElementById("dpPellets");
+    if (dpPellets) dpPellets.addEventListener("change", (e) => { state.damageToggles.pellets = Math.max(0, Number(e.target.value) || 0); renderDamagePanel(); });
+    const dpTippingStacks = document.getElementById("dpTippingStacks");
+    if (dpTippingStacks) dpTippingStacks.addEventListener("change", (e) => {
+      const max = tippingScales ? tippingScales.maxStacks : 0;
+      state.damageToggles.tippingScalesStacks = Math.max(0, Math.min(max, Number(e.target.value) || 0));
+      renderDamagePanel();
+    });
     el.querySelectorAll("[data-dp-effect]").forEach((inp) => inp.addEventListener("change", (e) => {
       state.damageToggles[inp.dataset.dpEffect] = e.target.checked;
       renderDamagePanel();
