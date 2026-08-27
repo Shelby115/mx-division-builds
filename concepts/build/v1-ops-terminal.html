@@ -111,6 +111,11 @@
     .damage-panel { position: fixed; top: 90px; right: max(16px, calc((100vw - 1320px) / 2 - 276px)); max-height: 78vh; overflow-y: auto; z-index: 5; }
   }
   .damage-panel .dp-title { font-family: var(--font-display); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 10px; }
+  .damage-panel .dp-weapon-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+  .damage-panel .dp-weapon-tab { flex: 1; font-family: var(--font-mono); font-size: 10.5px; padding: 5px 4px; border: 1px solid var(--line); color: var(--muted); cursor: pointer; background: var(--panel-2); }
+  .damage-panel .dp-weapon-tab:not(:disabled):hover { color: var(--text); }
+  .damage-panel .dp-weapon-tab.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  .damage-panel .dp-weapon-tab:disabled { opacity: .35; cursor: default; }
   .damage-panel .dp-base { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
   .damage-panel .dp-base-label { font-size: 12.5px; color: var(--muted); }
   .damage-panel .dp-base-value { font-family: var(--font-mono); font-size: 15px; font-weight: 600; }
@@ -618,7 +623,7 @@
   // damage-projection panel toggle state (crit/headshot + one entry per active conditional
   // effect id below) - a what-if exploration layer, session-only, never persisted and never
   // fed back into the real computed stats.
-  state.damageToggles = { crit: false, headshot: false, dta: false, dtooc: false, pellets: 0, tippingScalesStacks: 0 };
+  state.damageToggles = { crit: false, headshot: false, dta: false, dtooc: false, pellets: 0, tippingScalesStacks: 0, weaponSlot: "Primary" };
   let summaryOpen = false;
   let attachExpanded = {}; // weapon slot key -> bool, session-only UI state
 
@@ -887,10 +892,18 @@
     });
     return Math.round(p.baseDamage * (1 + weaponDamagePct / 100) * (1 + conditionalDamagePct / 100) * dtaMultiplier * dtoocMultiplier * amplifyMultiplier);
   }
+  const DAMAGE_PANEL_SLOTS = ["Primary", "Secondary", "SideArm"];
+  const DAMAGE_PANEL_SLOT_LABELS = { Primary: "Primary", Secondary: "Secondary", SideArm: "Sidearm" };
   function renderDamagePanel() {
     const el = document.getElementById("damagePanel");
-    const p = computeCurrent().weaponStats.Primary;
-    if (!p) { el.innerHTML = ""; return; }
+    const weaponStats = computeCurrent().weaponStats;
+    const equippedSlots = DAMAGE_PANEL_SLOTS.filter((s) => weaponStats[s]);
+    if (!equippedSlots.length) { el.innerHTML = ""; return; }
+    if (!equippedSlots.includes(state.damageToggles.weaponSlot)) state.damageToggles.weaponSlot = equippedSlots[0];
+    const p = weaponStats[state.damageToggles.weaponSlot];
+    const weaponTabsHtml = '<div class="dp-weapon-tabs">' + DAMAGE_PANEL_SLOTS.map((slot) =>
+      '<button class="dp-weapon-tab' + (slot === state.damageToggles.weaponSlot ? " active" : "") + '" data-dp-slot="' + slot + '"' + (weaponStats[slot] ? "" : " disabled") + '>' + DAMAGE_PANEL_SLOT_LABELS[slot] + '</button>'
+    ).join("") + '</div>';
     const effects = findActiveConditionalEffects();
     const projected = computeProjectedDamage(p, effects);
     const hitTypeOnCount = ["crit", "headshot"].filter((k) => state.damageToggles[k]).length;
@@ -922,7 +935,7 @@
     if (tippingScales) {
       const stacks = Math.min(state.damageToggles.tippingScalesStacks || 0, tippingScales.maxStacks);
       tippingScalesHtml =
-        '<div class="dp-group-label">Tipping Scales Stacks</div>' +
+        '<div class="dp-group-label" style="color:var(--q-gearset)">Tipping Scales Stacks</div>' +
         '<div class="dp-row"><span class="dp-row-label">Stack Count (max ' + tippingScales.maxStacks + ')</span><input type="number" id="dpTippingStacks" class="dp-pellet-input" min="0" max="' + tippingScales.maxStacks + '" placeholder="—" value="' + (stacks || "") + '"></div>' +
         (stacks > 0 ?
           '<div class="dp-row"><span class="dp-row-label">Critical Hit Damage</span><span class="dp-row-amount">+' + (stacks * 4) + '%</span></div>'
@@ -930,6 +943,7 @@
     }
     el.innerHTML =
       '<div class="dp-title">Damage Projection</div>' +
+      weaponTabsHtml +
       '<div class="dp-base"><span class="dp-base-label">Weapon Damage</span><span class="dp-base-value">' + fmt(p.totalDamage) + '</span></div>' +
       '<div class="dp-group-label">Hit Type</div>' +
       '<div class="dp-row"><span class="dp-row-label">Critical Hit <span class="dp-row-amount">+' + Math.round(p.chd) + '%</span></span>' + toggleSwitch('id="dpCrit"', state.damageToggles.crit) + '</div>' +
@@ -945,6 +959,11 @@
         '<div class="dp-row"><span class="dp-row-label">' + eff.label + ' <span class="dp-row-amount">+' + eff.amount + '%</span><br><span style="color:var(--muted);font-size:10.5px">' + eff.itemName + '</span></span>' + toggleSwitch('data-dp-effect="' + eff.id + '"', state.damageToggles[eff.id]) + '</div>'
       ).join("") : "") +
       '<div class="dp-result"><span class="dp-result-label">Projected Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div>';
+    el.querySelectorAll("[data-dp-slot]").forEach((btn) => btn.addEventListener("click", () => {
+      if (btn.disabled) return;
+      state.damageToggles.weaponSlot = btn.dataset.dpSlot;
+      renderDamagePanel();
+    }));
     document.getElementById("dpCrit").addEventListener("change", (e) => { state.damageToggles.crit = e.target.checked; renderDamagePanel(); });
     document.getElementById("dpHeadshot").addEventListener("change", (e) => { state.damageToggles.headshot = e.target.checked; renderDamagePanel(); });
     document.getElementById("dpDta").addEventListener("change", (e) => { state.damageToggles.dta = e.target.checked; renderDamagePanel(); });
@@ -1372,7 +1391,7 @@
         (item ? '<button class="tile-unequip" data-unequip-gear="' + s.key + '" title="Unequip">✕</button>' : "") +
         '<div class="tile-top">' + img("ui", s.icon, "tile-icon") + '<span class="tile-label">' + s.key + '</span>' +
           '<span class="tile-name-inline' + (item ? "" : " placeholder") + '">' + (item ? item.name : "Choose " + s.key.toLowerCase()) + '</span>' +
-          (item ? '<span class="tile-subtype">' + item.brand + '</span>' : "") +
+          (item && item.brand !== item.name ? '<span class="tile-subtype">' + item.brand + '</span>' : "") +
           (item ? '<span class="qtag q-' + qClass(item.quality) + '">' + item.quality + '</span>' : "") +
         '</div>' +
         (item ? gearExpertiseRowHtml(s.key) : "") +
