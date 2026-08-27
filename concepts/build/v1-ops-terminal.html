@@ -834,6 +834,12 @@
     "Septic Shock": [{ id: "septic-shock", label: "8+ Venom stacks (target takes bonus damage)", bucket: "amplify", amount: 20 }],
     "Weakest Link": [{ id: "weakest-link", label: "Target is the lowest-ranking enemy in combat", bucket: "amplify", amount: 30 }],
     "Bewildered": [{ id: "bewildered", label: "50% of damage redirected to another nearby enemy", bucket: "amplify", amount: -50 }],
+    // Vindictive also grants Critical Hit Chance, but the projection panel already boils crit
+    // down to a plain on/off toggle - only the Critical Hit Damage half is worth simulating.
+    "Vindictive": [{ id: "vindictive", label: "Killed a status-effected enemy (you + allies within 15m)", bucket: "critDamage", amount: 16 }],
+    "Perfect Vindictive": [{ id: "perfect-vindictive", label: "Killed a status-effected enemy (you + allies within 20m)", bucket: "critDamage", amount: 21 }],
+    "Wicked": [{ id: "wicked", label: "Applied a status effect (Total Weapon Damage)", bucket: "totalWeaponDamage", amount: 18 }],
+    "Perfectly Wicked": [{ id: "perfectly-wicked", label: "Applied a status effect (Total Weapon Damage)", bucket: "totalWeaponDamage", amount: 18 }],
   };
   // Tipping Scales' 3pc talent (Throttle Control) isn't a per-item Talent field like the
   // registry above - it's a brand-tier bonus that only exists once 3+ pieces are equipped, so
@@ -879,6 +885,10 @@
     let dtaMultiplier = 1;
     let dtoocMultiplier = 1;
     let amplifyMultiplier = 1;
+    // "Total Weapon Damage" (e.g. Wicked) is a separate bucket from the "Weapon Damage" bucket
+    // above - multiplicative against it - but multiple Total Weapon Damage sources still stack
+    // additively with each other inside their own bucket, same as Weapon Damage does.
+    let totalWeaponDamagePct = 0;
     // Tipping Scales' Throttle Control stacks grant flat Critical Hit Damage, same stat as
     // p.chd - it only matters on an actual crit, so it rides along with the Critical Hit
     // toggle rather than getting its own bucket.
@@ -892,8 +902,10 @@
       if (!toggles[eff.id]) return;
       if (eff.bucket === "weaponDamage") weaponDamagePct += eff.amount;
       else if (eff.bucket === "amplify") amplifyMultiplier *= (1 + eff.amount / 100);
+      else if (eff.bucket === "totalWeaponDamage") totalWeaponDamagePct += eff.amount;
+      else if (eff.bucket === "critDamage") { if (toggles.crit) conditionalDamagePct += eff.amount; }
     });
-    return Math.round(p.baseDamage * (1 + weaponDamagePct / 100) * (1 + conditionalDamagePct / 100) * dtaMultiplier * dtoocMultiplier * amplifyMultiplier);
+    return Math.round(p.baseDamage * (1 + weaponDamagePct / 100) * (1 + conditionalDamagePct / 100) * dtaMultiplier * dtoocMultiplier * (1 + totalWeaponDamagePct / 100) * amplifyMultiplier);
   }
   const DAMAGE_PANEL_SLOTS = ["Primary", "Secondary", "SideArm"];
   const DAMAGE_PANEL_SLOT_LABELS = { Primary: "Primary", Secondary: "Secondary", SideArm: "Sidearm" };
@@ -955,7 +967,6 @@
       '<div class="dp-group-label">Target Damage</div>' +
       '<div class="dp-row"><span class="dp-row-label">Damage to Armor <span class="dp-row-amount">+' + Math.round(p.dta) + '%</span></span>' + toggleSwitch('id="dpDta"', state.damageToggles.dta) + '</div>' +
       '<div class="dp-row"><span class="dp-row-label">Damage to TOC <span class="dp-row-amount">+' + Math.round(p.dtooc) + '%</span></span>' + toggleSwitch('id="dpDtooc"', state.damageToggles.dtooc) + '</div>' +
-      '<div class="dp-empty">Damage to Armor and Damage to TOC each apply as their own independent multiplier.</div>' +
       pelletGroupHtml +
       tippingScalesHtml +
       (effects.length ? '<div class="dp-group-label">Conditional Bonuses</div>' + effects.map((eff) =>
