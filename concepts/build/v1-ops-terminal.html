@@ -833,6 +833,7 @@
   const CONDITIONAL_TALENT_EFFECTS = {
     "Septic Shock": [{ id: "septic-shock", label: "8+ Venom stacks (target takes bonus damage)", bucket: "amplify", amount: 20 }],
     "Weakest Link": [{ id: "weakest-link", label: "Target is the lowest-ranking enemy in combat", bucket: "amplify", amount: 30 }],
+    "Bewildered": [{ id: "bewildered", label: "50% of damage redirected to another nearby enemy", bucket: "amplify", amount: -50 }],
   };
   // Tipping Scales' 3pc talent (Throttle Control) isn't a per-item Talent field like the
   // registry above - it's a brand-tier bonus that only exists once 3+ pieces are equipped, so
@@ -845,10 +846,11 @@
     const maxStacks = (state.gear.Chest && state.gear.Chest.name === "Tipping Scales") ? 75 : 50;
     return { maxStacks };
   }
+  const QUALITY_TEXT_COLOR = { Exotic: "var(--q-exotic)", Named: "var(--q-named-text)", Gearset: "var(--q-gearset)", "High End": "var(--q-highend)" };
   function findActiveConditionalEffects() {
     const found = [];
     const seenIds = new Set();
-    function checkTalent(talent, itemName) {
+    function checkTalent(talent, itemName, itemQuality) {
       if (!talent) return;
       const effects = CONDITIONAL_TALENT_EFFECTS[talent.Talent || talent.Name];
       if (!effects) return;
@@ -856,11 +858,11 @@
         const id = eff.id + ":" + itemName; // distinct toggle per item, in the rare case the same talent shows up twice
         if (seenIds.has(id)) return;
         seenIds.add(id);
-        found.push(Object.assign({}, eff, { id, itemName }));
+        found.push(Object.assign({}, eff, { id, itemName, itemQuality }));
       });
     }
-    Object.values(state.weapons).forEach((w) => { if (w) checkTalent(w.talent, w.name); });
-    Object.values(state.gear).forEach((g) => { if (g) checkTalent(g.talent, g.name); });
+    Object.values(state.weapons).forEach((w) => { if (w) checkTalent(w.talent, w.name, w.quality); });
+    Object.values(state.gear).forEach((g) => { if (g) checkTalent(g.talent, g.name, g.quality); });
     return found;
   }
   // toggles defaults to the real current state, but a caller can pass an override (e.g. the
@@ -957,7 +959,7 @@
       pelletGroupHtml +
       tippingScalesHtml +
       (effects.length ? '<div class="dp-group-label">Conditional Bonuses</div>' + effects.map((eff) =>
-        '<div class="dp-row"><span class="dp-row-label">' + eff.label + ' <span class="dp-row-amount">+' + eff.amount + '%</span><br><span style="color:var(--muted);font-size:10.5px">' + eff.itemName + '</span></span>' + toggleSwitch('data-dp-effect="' + eff.id + '"', state.damageToggles[eff.id]) + '</div>'
+        '<div class="dp-row"><span class="dp-row-label">' + eff.label + ' <span class="dp-row-amount">' + (eff.amount >= 0 ? "+" : "") + eff.amount + '%</span><br><span style="color:' + (QUALITY_TEXT_COLOR[eff.itemQuality] || "var(--muted)") + ';font-size:10.5px">' + eff.itemName + '</span></span>' + toggleSwitch('data-dp-effect="' + eff.id + '"', state.damageToggles[eff.id]) + '</div>'
       ).join("") : "") +
       '<div class="dp-result"><span class="dp-result-label">Projected Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div>';
     el.querySelectorAll("[data-dp-slot]").forEach((btn) => btn.addEventListener("click", () => {
