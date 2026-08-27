@@ -315,6 +315,23 @@ window.Engine = (function () {
 				}
 			}
 
+			// Capacitor's Capacitance talent: flat Weapon Damage per point of Skill Tier, always
+			// active (not a toggle) - Skill Tier is already capped at 6 by the game, this just
+			// re-affirms that cap defensively.
+			const capacitorEquipped = ["Primary", "Secondary", "SideArm"].some((k) => loadout.weapons && loadout.weapons[k] && loadout.weapons[k].talent && loadout.weapons[k].talent.Name === "Capacitance");
+			if (capacitorEquipped) {
+				const tier = Math.min(6, stats.Utility["Skill Tier"] || 0);
+				if (tier > 0) add(stats.Offensive, "Weapon Damage", tier * 7.5, "Capacitance (Skill Tier)");
+			}
+
+			// Kill Confirmed (Memento, Backpack exotic): +5% Weapon Damage per equipped
+			// Offensive (red) core attribute, always active - the separate 30-stack trophy
+			// buff is situational, modeled as a toggle in the Damage Projection panel instead.
+			if (loadout.gear && loadout.gear.Backpack && loadout.gear.Backpack.name === "Memento") {
+				const redCores = gearList.filter((g) => g.core && g.core.Type === "O").length;
+				if (redCores > 0) add(stats.Offensive, "Weapon Damage", redCores * 5, "Kill Confirmed (Memento)");
+			}
+
 			// shared expertise level (0-30) is the default for every weapon's own expertise -
 			// each weapon slot can override it (loadout.weaponExpertise, keyed by slot), same
 			// pattern as gear's per-piece expertise. It adds straight into weapon damage %, same

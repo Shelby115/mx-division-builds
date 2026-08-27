@@ -128,6 +128,16 @@
     width: 52px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
     font-family: var(--font-mono); font-size: 12px; padding: 3px 6px; text-align: right;
   }
+  .damage-panel .dp-choice-row { padding-bottom: 2px; }
+  .damage-panel .dp-choice-btns { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+  .damage-panel .dp-choice-btn {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+    font-family: var(--font-body); font-size: 12px; padding: 5px 9px; cursor: pointer; text-align: left;
+  }
+  .damage-panel .dp-choice-btn:hover { color: var(--text); }
+  .damage-panel .dp-choice-btn.active { border-color: var(--accent); color: var(--text); background: var(--accent-dim); }
+  .damage-panel .dp-choice-btn .dp-row-amount { font-size: 11px; }
   .damage-panel .dp-result { display: flex; justify-content: space-between; align-items: baseline; padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--line); }
   .damage-panel .dp-result-label { font-size: 12.5px; color: var(--muted); }
   .damage-panel .dp-result-value { font-family: var(--font-mono); font-size: 17px; font-weight: 700; color: var(--accent); }
@@ -954,6 +964,33 @@
     "Cover Shooter": [{ id: "cover-shooter", label: "Stacks (1 per bullet fired in cover, max 100)", bucket: "weaponDamage", stacks: { max: 100, perStack: 1 } }],
     "Gangland Hit": [{ id: "gangland-hit", label: "Marks on target (1 = 20%, +5% per extra, max 4)", bucket: "amplify", stacks: { max: 4, perStack: 5, base: 15 } }],
     "Full Stop": [{ id: "full-stop", label: "Stacks (shooting builds, headshots grant 2, max 20)", bucket: "weaponDamage", stacks: { max: 20, perStack: 2 }, stacksSecondary: { bucket: "hsd", perStack: 5 } }],
+    // Measured alternates a penalty (top half of the magazine) and a bonus (bottom half) -
+    // modeled as a choice between the two states rather than a plain toggle. RPM isn't modeled.
+    "Measured": [{ id: "measured", label: "Which half of the magazine", bucket: "weaponDamage", choices: [{ key: "top", label: "Top Half", amount: -30 }, { key: "bottom", label: "Bottom Half", amount: 30 }] }],
+    "Perfectly Measured": [{ id: "perfectly-measured", label: "Which half of the magazine", bucket: "weaponDamage", choices: [{ key: "top", label: "Top Half", amount: -27 }, { key: "bottom", label: "Bottom Half", amount: 33 }] }],
+    "Big Game Hunter": [
+      { id: "big-game-hunter", label: "Scoped semi-auto mode active", bucket: "weaponDamage", amount: 450 },
+      { id: "big-game-hunter-stacks", label: "Headshot stacks while active (max 25)", bucket: "hsd", stacks: { max: 25, perStack: 6 } },
+    ],
+    // Simplified to one toggle covering both damage-relevant halves of the talent (the reload
+    // speed buff from leg shots isn't modeled).
+    "Adaptive Instincts": [{ id: "adaptive-instincts", label: "30 headshots + 65 body shots landed (buffs active)", bucket: "critDamage", amount: 50, secondary: { bucket: "weaponDamage", amount: 90 } }],
+    "Empathic Resolve": [{ id: "empathic-resolve", label: "Repaired an ally (max value)", bucket: "totalWeaponDamage", amount: 15 }],
+    "Perfect Empathic Resolve": [{ id: "perfect-empathic-resolve", label: "Repaired an ally (max value)", bucket: "totalWeaponDamage", amount: 20 }],
+    "Pack Instincts": [
+      { id: "pack-instincts-close", label: "Last hit was 0-15m away", bucket: "critDamage", amount: 25 },
+      { id: "pack-instincts-mid", label: "Last hit was 15-25m away", bucket: "critDamage", amount: 10 },
+    ],
+    // Kill Confirmed's per-core instant bonus is always-on (see engine.js, same pattern as The
+    // Investor) - this is only the separate 30-stack persistent trophy bonus.
+    "Kill Confirmed": [{ id: "kill-confirmed", label: "Trophies collected (persistent stacks, max 30)", bucket: "weaponDamage", stacks: { max: 30, perStack: 1 } }],
+    "Counter": [{ id: "counter", label: "Weapon swap (PvE)", bucket: "weaponDamage", amount: 20 }],
+    "Ostracize": [{ id: "ostracize", label: "Dealing damage to an unmarked enemy", bucket: "amplify", amount: 20 }],
+    "Bond": [{ id: "bond", label: "Which buff is active", bucket: "critDamage", choices: [{ key: "ally", label: "Ally within 10m", amount: 30 }, { key: "skill", label: "Skill within 10m", amount: 15 }] }],
+    "Rebalance": [{ id: "rebalance", label: "Red stacks (kills/hits, max 80)", bucket: "weaponDamage", stacks: { max: 80, perStack: 0.5 } }],
+    "Agonizing Bite": [{ id: "agonizing-bite", label: "Hit the marked enemy (guaranteed crits active)", bucket: "amplify", amount: 20 }],
+    "Headhunter": [{ id: "headhunter", label: "Enter % (up to 1250, based on your headshot kill's damage)", bucket: "weaponDamage", stacks: { max: 1250, perStack: 1 } }],
+    "Perfect Headhunter": [{ id: "perfect-headhunter", label: "Enter % (up to 1250, based on your headshot kill's damage)", bucket: "weaponDamage", stacks: { max: 1250, perStack: 1 } }],
   };
   // Tipping Scales' 3pc talent (Throttle Control) isn't a per-item Talent field like the
   // registry above - it's a brand-tier bonus that only exists once 3+ pieces are equipped, so
@@ -969,23 +1006,138 @@
     const perStackCHD = (state.gear.Backpack && state.gear.Backpack.name === "Tipping Scales") ? 7 : 4;
     return { maxStacks, perStackCHD };
   }
+  // Every gear set (besides Tipping Scales, handled separately above) unlocks its main talent
+  // at 3pc, same as Tipping Scales does - and several of them have a Backpack or Chest piece
+  // whose own fixed talent just modifies one number on that same base mechanic (identical
+  // shape to Tipping Scales' Chest/Backpack). gearsetTalentEquipped checks by TALENT NAME
+  // rather than a hardcoded slot, since gearset piece talents are fixed (not rerollable) so
+  // "this exact talent is equipped" and "this exact slot is equipped" are equivalent, and the
+  // talent-name check doesn't depend on remembering which slot each modifier lives on.
+  function gearsetPieceCount(brand) {
+    return Object.values(state.gear || {}).filter((g) => g && g.name === brand).length;
+  }
+  function gearsetActive(brand, minPieces) {
+    return gearsetPieceCount(brand) >= (minPieces || 3);
+  }
+  function gearsetTalentEquipped(brand, talentName) {
+    return Object.values(state.gear || {}).some((g) => g && g.name === brand && g.talent && (g.talent.Talent === talentName || g.talent.Name === talentName));
+  }
+  // Core Strength and Virtuoso are intentionally not modeled yet - both need a dedicated pass
+  // (Core Strength's cross-core bonus math, Virtuoso's weapon-type + max-stack-doubling logic).
+  function computeGearsetEffects() {
+    const out = [];
+    function add(brand, id, label, bucket, amount) {
+      out.push({ id: "gs-" + id, label, bucket, amount, itemName: brand, itemQuality: "Gearset" });
+    }
+    function addStacks(brand, id, label, bucket, max, perStack, stacksSecondary) {
+      const eff = { id: "gs-" + id, label, bucket, stacks: { max, perStack }, itemName: brand, itemQuality: "Gearset" };
+      if (stacksSecondary) eff.stacksSecondary = stacksSecondary;
+      out.push(eff);
+    }
+    if (gearsetActive("Aces & Eights")) {
+      add("Aces & Eights", "aces-eights", "5+ cards flipped (Marksman Rifle)", "amplify", gearsetTalentEquipped("Aces & Eights", "No Limit") ? 50 : 30);
+    }
+    if (gearsetActive("Breaking Point")) {
+      addStacks("Breaking Point", "breaking-point", "Stacks (1 per Rifle/MMR hit, consumed on reload - no fixed cap, limited by mag size)", "weaponDamage", 999, gearsetTalentEquipped("Breaking Point", "Point of Honor") ? 7.2 : 4);
+    }
+    if (gearsetActive("Concentrated Company")) {
+      addStacks("Concentrated Company", "concentrated-company", "Stacks (marked enemy killed, max 35)", "weaponDamage", 35, 3, { bucket: "critDamage", perStack: gearsetTalentEquipped("Concentrated Company", "One for All") ? 5 : 2 });
+    }
+    if (gearsetActive("Eclipse Protocol") && gearsetTalentEquipped("Eclipse Protocol", "Symptom Aggravator")) {
+      add("Eclipse Protocol", "eclipse-protocol", "Target has a status effect", "amplify", 30);
+    }
+    if (gearsetActive("Future Initiative")) {
+      add("Future Initiative", "future-initiative", "At full armor", "totalWeaponDamage", gearsetTalentEquipped("Future Initiative", "Tactical Superiority") ? 25 : 15);
+    }
+    if (gearsetActive("Heartbreaker")) {
+      addStacks("Heartbreaker", "heartbreaker", "Stacks (weapon hits on a pulsed enemy)", "amplify", gearsetTalentEquipped("Heartbreaker", "Max BPM") ? 100 : 50, 1.1);
+    }
+    if (gearsetActive("Hotshot")) {
+      add("Hotshot", "hotshot", "First headshot with a Marksman Rifle", "hsd", 20);
+    }
+    if (gearsetActive("Hunter's Fury")) {
+      add("Hunter's Fury", "hunters-fury-debuff", "Enemy within 15m (debuff)", "amplify", 20);
+      addStacks("Hunter's Fury", "hunters-fury-stacks", "Kill stacks (separate bucket, max 5)", "amplify", 5, 5);
+    }
+    if (gearsetActive("Negotiator's Dilemma")) {
+      addStacks("Negotiator's Dilemma", "negotiators-dilemma", "Stacks (marked enemy dies, max 20)", "critDamage", 20, 2);
+    }
+    if (gearsetActive("Ongoing Directive")) {
+      add("Ongoing Directive", "ongoing-directive", "Killed a marked, status-effected enemy", "amplify", gearsetTalentEquipped("Ongoing Directive", "Parabellum Rounds") ? 50 : 20);
+    }
+    if (gearsetActive("Ortiz: Exuro")) {
+      add("Ortiz: Exuro", "ortiz-exuro", "Always on (3pc)", "weaponDamage", 25);
+    }
+    if (gearsetActive("Striker's Battlegear")) {
+      addStacks("Striker's Battlegear", "strikers-battlegear", "Stacks (weapon hits)", "totalWeaponDamage",
+        gearsetTalentEquipped("Striker's Battlegear", "Press the Advantage") ? 200 : 100,
+        gearsetTalentEquipped("Striker's Battlegear", "Risk Management") ? 0.9 : 0.65);
+    }
+    if (gearsetActive("System Corruption")) {
+      addStacks("System Corruption", "system-corruption", "Stacks (bonus armor gained in 5% increments, max 4)", "totalWeaponDamage", 4, 1);
+    }
+    if (gearsetActive("Tip of the Spear") && gearsetTalentEquipped("Tip of the Spear", "Specialized Destruction")) {
+      add("Tip of the Spear", "tip-of-the-spear", "Depleted Signature Weapon ammo", "weaponDamage", 50);
+    }
+    if (gearsetActive("True Patriot")) {
+      add("True Patriot", "true-patriot", "Red debuff active on target", "amplify", gearsetTalentEquipped("True Patriot", "Patriotic Boost") ? 12 : 8);
+    }
+    if (gearsetActive("Umbra Initiative")) {
+      addStacks("Umbra Initiative", "umbra-initiative", "Stacks (in cover)", "critDamage", gearsetTalentEquipped("Umbra Initiative", "Into The Light") ? 100 : 50, 1);
+    }
+    return out;
+  }
   const QUALITY_TEXT_COLOR = { Exotic: "var(--q-exotic)", Named: "var(--q-named-text)", Gearset: "var(--q-gearset)", "High End": "var(--q-highend)" };
-  function findActiveConditionalEffects() {
+  // Talents whose bonus depends on the CURRENTLY VIEWED weapon's type (Versatile's swap bonus
+  // is 35%/10% depending on whether that weapon is a close-range, long-range, or mid-range
+  // type) - the real talent covers a weapon-type + distance-range combo; this uses each
+  // weapon type's normal engagement range, per the simplification of not modeling range.
+  // Pistols aren't covered by the source text at all, so they get no bonus here.
+  const WEAPON_TYPE_DAMAGE_LOOKUP = {
+    "Versatile": { Shotgun: 35, SMG: 35, Rifle: 35, "Marksman Rifle": 35, LMG: 10, "Assault Rifle": 10 },
+    "Perfect Versatile": { Shotgun: 45, SMG: 45, Rifle: 45, "Marksman Rifle": 45, LMG: 20, "Assault Rifle": 20 },
+  };
+  function findActiveConditionalEffects(viewedSlot) {
     const found = [];
     const seenIds = new Set();
     function checkTalent(talent, itemName, itemQuality) {
       if (!talent) return;
-      const effects = CONDITIONAL_TALENT_EFFECTS[talent.Talent || talent.Name];
-      if (!effects) return;
-      effects.forEach((eff) => {
-        const id = eff.id + ":" + itemName; // distinct toggle per item, in the rare case the same talent shows up twice
-        if (seenIds.has(id)) return;
-        seenIds.add(id);
-        found.push(Object.assign({}, eff, { id, itemName, itemQuality }));
-      });
+      const name = talent.Talent || talent.Name;
+      const effects = CONDITIONAL_TALENT_EFFECTS[name];
+      if (effects) {
+        effects.forEach((eff) => {
+          const id = eff.id + ":" + itemName; // distinct toggle per item, in the rare case the same talent shows up twice
+          if (seenIds.has(id)) return;
+          seenIds.add(id);
+          found.push(Object.assign({}, eff, { id, itemName, itemQuality }));
+        });
+      }
+      const wtTable = WEAPON_TYPE_DAMAGE_LOOKUP[name];
+      const viewedWeapon = viewedSlot && state.weapons[viewedSlot];
+      if (wtTable && viewedWeapon && wtTable[viewedWeapon.weaponType] != null) {
+        const id = "wt-" + name.toLowerCase().replace(/\s+/g, "-") + ":" + itemName;
+        if (!seenIds.has(id)) {
+          seenIds.add(id);
+          found.push({ id, label: "Swapped weapons (" + viewedWeapon.weaponType + ")", bucket: "totalWeaponDamage", amount: wtTable[viewedWeapon.weaponType], itemName, itemQuality });
+        }
+      }
     }
-    Object.values(state.weapons).forEach((w) => { if (w) checkTalent(w.talent, w.name, w.quality); });
+    // Weapon talents only apply to the weapon they're rolled on - except Abridged (Mask
+    // exotic), which copies the Secondary weapon's talent onto the Primary when both weapons
+    // are the same type and neither is Named or Exotic.
+    if (viewedSlot) {
+      const viewedWeapon = state.weapons[viewedSlot];
+      if (viewedWeapon) checkTalent(viewedWeapon.talent, viewedWeapon.name, viewedWeapon.quality);
+      const mask = state.gear.Mask;
+      const abridged = mask && mask.talent && mask.talent.Talent === "Abridged";
+      const prim = state.weapons.Primary, sec = state.weapons.Secondary;
+      const notLocked = (w) => w && w.quality !== "Named" && w.quality !== "Exotic";
+      if (viewedSlot === "Primary" && abridged && prim && sec && prim.weaponType === sec.weaponType && notLocked(prim) && notLocked(sec)) {
+        checkTalent(sec.talent, sec.name + " (via Abridged)", sec.quality);
+      }
+    }
     Object.values(state.gear).forEach((g) => { if (g) checkTalent(g.talent, g.name, g.quality); });
+    found.push(...computeGearsetEffects());
     return found;
   }
   // toggles defaults to the real current state, but a caller can pass an override (e.g. the
@@ -1038,8 +1190,19 @@
         if (eff.stacksSecondary) applyToBucket(eff.stacksSecondary.bucket, n * eff.stacksSecondary.perStack);
         return;
       }
+      // choices: mutually-exclusive states (e.g. Bond's "ally nearby" vs "skill nearby") -
+      // toggles[eff.id] holds the chosen option's key, or is falsy for "none selected".
+      if (eff.choices) {
+        const chosen = eff.choices.find((c) => c.key === toggles[eff.id]);
+        if (chosen) applyToBucket(eff.bucket, chosen.amount);
+        return;
+      }
       if (!toggles[eff.id]) return;
       applyToBucket(eff.bucket, eff.amount);
+      // secondary: a plain toggle that also grants a flat amount in a second bucket (e.g.
+      // Chameleon's Adaptive Instincts granting both Critical Hit Damage and Weapon Damage
+      // from the same on/off switch).
+      if (eff.secondary) applyToBucket(eff.secondary.bucket, eff.secondary.amount);
     });
     const dtaMultiplier = 1 + dtaPct / 100;
     const dtoocMultiplier = 1 + dtoocPct / 100;
@@ -1057,7 +1220,7 @@
     const weaponTabsHtml = '<div class="dp-weapon-tabs">' + DAMAGE_PANEL_SLOTS.map((slot) =>
       '<button class="dp-weapon-tab' + (slot === state.damageToggles.weaponSlot ? " active" : "") + '" data-dp-slot="' + slot + '"' + (weaponStats[slot] ? "" : " disabled") + '>' + DAMAGE_PANEL_SLOT_LABELS[slot] + '</button>'
     ).join("") + '</div>';
-    const effects = findActiveConditionalEffects();
+    const effects = findActiveConditionalEffects(state.damageToggles.weaponSlot);
     const projected = computeProjectedDamage(p, effects);
     const hitTypeOnCount = ["crit", "headshot"].filter((k) => state.damageToggles[k]).length;
     function toggleSwitch(attr, checked) {
@@ -1114,6 +1277,13 @@
           return '<div class="dp-row"><span class="dp-row-label">' + eff.label + itemTag + '</span>' +
             '<input type="number" class="dp-pellet-input" min="0" max="' + eff.stacks.max + '" placeholder="—" data-dp-stack-effect="' + eff.id + '" value="' + (n || "") + '"></div>';
         }
+        if (eff.choices) {
+          const chosen = state.damageToggles[eff.id];
+          return '<div class="dp-row dp-choice-row"><span class="dp-row-label">' + eff.label + itemTag + '</span></div>' +
+            '<div class="dp-choice-btns">' + eff.choices.map((c) =>
+              '<button class="dp-choice-btn' + (chosen === c.key ? " active" : "") + '" data-dp-choice-effect="' + eff.id + '" data-dp-choice-key="' + c.key + '">' + c.label + ' <span class="dp-row-amount">' + (c.amount >= 0 ? "+" : "") + c.amount + '%</span></button>'
+            ).join("") + '</div>';
+        }
         return '<div class="dp-row"><span class="dp-row-label">' + eff.label + ' <span class="dp-row-amount">' + (eff.amount >= 0 ? "+" : "") + eff.amount + '%</span>' + itemTag + '</span>' + toggleSwitch('data-dp-effect="' + eff.id + '"', state.damageToggles[eff.id]) + '</div>';
       }).join("") : "") +
       '<div class="dp-result"><span class="dp-result-label">Projected Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div>';
@@ -1142,6 +1312,11 @@
       const eff = effects.find((x) => x.id === inp.dataset.dpStackEffect);
       const max = eff && eff.stacks ? eff.stacks.max : 999;
       state.damageToggles[inp.dataset.dpStackEffect] = Math.max(0, Math.min(max, Number(e.target.value) || 0));
+      renderDamagePanel();
+    }));
+    el.querySelectorAll("[data-dp-choice-effect]").forEach((btn) => btn.addEventListener("click", () => {
+      const id = btn.dataset.dpChoiceEffect, key = btn.dataset.dpChoiceKey;
+      state.damageToggles[id] = state.damageToggles[id] === key ? null : key; // click active choice again to deselect
       renderDamagePanel();
     }));
   }
