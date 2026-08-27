@@ -315,6 +315,35 @@ window.Engine = (function () {
 				}
 			}
 
+			// Core Strength (gearset, 4pc+): each equipped Core attribute grants 40% (or 75% with
+			// the Chest piece's fixed Inner Core talent) of what a core of each OTHER type would
+			// give, using that type's standard max value - not a fraction of whatever the player
+			// actually has equipped elsewhere. Always active (not a toggle), same pattern as The
+			// Investor. Skill Tier's cross-bonus is expressed as Skill Efficiency (the talent's
+			// own text: "Skill Tiers count as 15% Skill Efficiency"), not as fractional Skill
+			// Tier points, so it doesn't feed back into the Skill Tier core-count.
+			const coreStrengthPieces = Object.values(loadout.gear || {}).filter((g) => g && g.name === "Core Strength").length;
+			if (coreStrengthPieces >= 4) {
+				const innerCore = Object.values(loadout.gear || {}).some((g) => g && g.name === "Core Strength" && g.talent && g.talent.Talent === "Inner Core");
+				const pct = (innerCore ? 75 : 40) / 100;
+				const ARMOR_CORE_MAX = 170000, WEAPON_CORE_MAX = 15, SKILL_TIER_AS_EFFICIENCY = 15;
+				const redCount = stats.Cores.Offensive.length;
+				const blueCount = stats.Cores.Defensive.length;
+				const yellowCount = stats.Cores.Utility.length;
+				for (let i = 0; i < redCount; i++) {
+					stats.Cores.Defensive.push(ARMOR_CORE_MAX * pct);
+					add(stats.Utility, "Skill Efficiency", SKILL_TIER_AS_EFFICIENCY * pct, "Core Strength");
+				}
+				for (let i = 0; i < blueCount; i++) {
+					stats.Cores.Offensive.push(WEAPON_CORE_MAX * pct);
+					add(stats.Utility, "Skill Efficiency", SKILL_TIER_AS_EFFICIENCY * pct, "Core Strength");
+				}
+				for (let i = 0; i < yellowCount; i++) {
+					stats.Cores.Offensive.push(WEAPON_CORE_MAX * pct);
+					stats.Cores.Defensive.push(ARMOR_CORE_MAX * pct);
+				}
+			}
+
 			// Capacitor's Capacitance talent: flat Weapon Damage per point of Skill Tier, always
 			// active (not a toggle) - Skill Tier is already capped at 6 by the game, this just
 			// re-affirms that cap defensively.

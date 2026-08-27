@@ -992,14 +992,14 @@
     "Headhunter": [{ id: "headhunter", label: "Enter % (up to 1250, based on your headshot kill's damage)", bucket: "weaponDamage", stacks: { max: 1250, perStack: 1 } }],
     "Perfect Headhunter": [{ id: "perfect-headhunter", label: "Enter % (up to 1250, based on your headshot kill's damage)", bucket: "weaponDamage", stacks: { max: 1250, perStack: 1 } }],
   };
-  // Tipping Scales' 3pc talent (Throttle Control) isn't a per-item Talent field like the
-  // registry above - it's a brand-tier bonus that only exists once 3+ pieces are equipped, so
+  // Tipping Scales' 4pc talent (Throttle Control) isn't a per-item Talent field like the
+  // registry above - it's a brand-tier bonus that only exists once 4+ pieces are equipped, so
   // it needs its own detection instead of going through findActiveConditionalEffects. The Chest
   // piece's own talent (Sustainability) is fixed - it's the only variant of that item - so its
   // presence just means the max stack cap is 75 instead of 50.
   function tippingScalesActive() {
     const pieces = Object.values(state.gear || {}).filter((g) => g && g.name === "Tipping Scales");
-    if (pieces.length < 3) return null;
+    if (pieces.length < 4) return null;
     const maxStacks = (state.gear.Chest && state.gear.Chest.name === "Tipping Scales") ? 75 : 50;
     // Backpack's fixed talent (Snowball) raises the per-stack Critical Hit Damage from 4% to
     // 7%, same pattern as Chest's Sustainability raising the max stack cap.
@@ -1007,17 +1007,19 @@
     return { maxStacks, perStackCHD };
   }
   // Every gear set (besides Tipping Scales, handled separately above) unlocks its main talent
-  // at 3pc, same as Tipping Scales does - and several of them have a Backpack or Chest piece
-  // whose own fixed talent just modifies one number on that same base mechanic (identical
-  // shape to Tipping Scales' Chest/Backpack). gearsetTalentEquipped checks by TALENT NAME
-  // rather than a hardcoded slot, since gearset piece talents are fixed (not rerollable) so
-  // "this exact talent is equipped" and "this exact slot is equipped" are equivalent, and the
-  // talent-name check doesn't depend on remembering which slot each modifier lives on.
+  // at 4pc, same as Tipping Scales does - confirmed directly from BrandSetBonuses.csv, which
+  // never has a "<Brand>0" row for any gear set, only 1/2/3 (2pc/3pc/4pc), with the Talent
+  // always at index 3. Several sets also have a Backpack or Chest piece whose own fixed talent
+  // just modifies one number on that same base mechanic (identical shape to Tipping Scales'
+  // Chest/Backpack). gearsetTalentEquipped checks by TALENT NAME rather than a hardcoded slot,
+  // since gearset piece talents are fixed (not rerollable) so "this exact talent is equipped"
+  // and "this exact slot is equipped" are equivalent, and the talent-name check doesn't depend
+  // on remembering which slot each modifier lives on.
   function gearsetPieceCount(brand) {
     return Object.values(state.gear || {}).filter((g) => g && g.name === brand).length;
   }
   function gearsetActive(brand, minPieces) {
-    return gearsetPieceCount(brand) >= (minPieces || 3);
+    return gearsetPieceCount(brand) >= (minPieces || 4);
   }
   function gearsetTalentEquipped(brand, talentName) {
     return Object.values(state.gear || {}).some((g) => g && g.name === brand && g.talent && (g.talent.Talent === talentName || g.talent.Name === talentName));
@@ -1066,7 +1068,7 @@
       add("Ongoing Directive", "ongoing-directive", "Killed a marked, status-effected enemy", "amplify", gearsetTalentEquipped("Ongoing Directive", "Parabellum Rounds") ? 50 : 20);
     }
     if (gearsetActive("Ortiz: Exuro")) {
-      add("Ortiz: Exuro", "ortiz-exuro", "Always on (3pc)", "weaponDamage", 25);
+      add("Ortiz: Exuro", "ortiz-exuro", "Always on (4pc)", "weaponDamage", 25);
     }
     if (gearsetActive("Striker's Battlegear")) {
       addStacks("Striker's Battlegear", "strikers-battlegear", "Stacks (weapon hits)", "totalWeaponDamage",
