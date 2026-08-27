@@ -925,9 +925,7 @@
         '<div class="dp-group-label">Tipping Scales Stacks</div>' +
         '<div class="dp-row"><span class="dp-row-label">Stack Count (max ' + tippingScales.maxStacks + ')</span><input type="number" id="dpTippingStacks" class="dp-pellet-input" min="0" max="' + tippingScales.maxStacks + '" placeholder="—" value="' + (stacks || "") + '"></div>' +
         (stacks > 0 ?
-          '<div class="dp-row"><span class="dp-row-label">Weapon Handling</span><span class="dp-row-amount">+' + (stacks * 0.5) + '%</span></div>' +
-          '<div class="dp-row"><span class="dp-row-label">Critical Hit Damage</span><span class="dp-row-amount">+' + (stacks * 4) + '%</span></div>' +
-          '<div class="dp-empty">Adds to the Critical Hit bucket above - only counts while Critical Hit is toggled on. Weapon Handling doesn\'t affect damage, shown for reference only.</div>'
+          '<div class="dp-row"><span class="dp-row-label">Critical Hit Damage</span><span class="dp-row-amount">+' + (stacks * 4) + '%</span></div>'
         : "");
     }
     el.innerHTML =
