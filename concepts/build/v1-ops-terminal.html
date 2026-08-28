@@ -1297,9 +1297,13 @@
   }
   function renderDamagePanel() {
     const el = document.getElementById("damagePanel");
-    const weaponStats = computeCurrent().weaponStats;
+    const current = computeCurrent();
+    const weaponStats = current.weaponStats;
+    // Toxic Delivery doesn't depend on a weapon being equipped at all (it's off the Vile mask's
+    // own talent), so it's built and shown independently of whether any weapon slot is filled.
+    const toxicPanel = buildToxicDeliveryPanel(current.stats);
     const equippedSlots = DAMAGE_PANEL_SLOTS.filter((s) => weaponStats[s]);
-    if (!equippedSlots.length) { el.innerHTML = ""; return; }
+    if (!equippedSlots.length) { el.innerHTML = toxicPanel ? toxicPanel.html : ""; return; }
     if (!equippedSlots.includes(state.damageToggles.weaponSlot)) state.damageToggles.weaponSlot = equippedSlots[0];
     const p = weaponStats[state.damageToggles.weaponSlot];
     const weaponTabsHtml = '<div class="dp-weapon-tabs">' + DAMAGE_PANEL_SLOTS.map((slot) =>
@@ -1308,7 +1312,6 @@
     const effects = findActiveConditionalEffects(state.damageToggles.weaponSlot);
     const projected = computeProjectedDamage(p, effects);
     const plaguePanel = buildPlagueOfOutcastsPanel(weaponStats);
-    const toxicPanel = buildToxicDeliveryPanel(computeCurrent().stats);
     // effects lookup for handling stack-input changes needs to cover ids from every rendered
     // panel, not just the main one - a weapon-scoped effect on Pestilence (e.g. Plague of the
     // Outcasts itself, if it ever grows a stack) won't be in `effects` unless Pestilence is the
