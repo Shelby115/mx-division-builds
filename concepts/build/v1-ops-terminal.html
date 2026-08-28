@@ -103,12 +103,15 @@
   .quality-strip .qs-attr .qs-item { color: var(--text); }
 
   /* ---------- damage projection panel: crit/headshot/conditional-bonus toggles ---------- */
+  /* #damagePanel is a stack of one or more separate .damage-panel boxes - the main weapon
+     projection plus any active secondary projections (Plague of the Outcasts, Toxic Delivery, ...) */
+  .damage-panel-stack { display: flex; flex-direction: column; gap: 14px; }
+  .damage-panel-stack:empty { display: none; }
+  @media (min-width: 1560px) {
+    .damage-panel-stack { position: fixed; top: 90px; right: max(16px, calc((100vw - 1320px) / 2 - 276px)); max-height: 78vh; overflow-y: auto; z-index: 5; }
+  }
   .damage-panel {
     background: var(--panel); border: 1px solid var(--line); padding: 14px 16px; width: 260px;
-  }
-  .damage-panel:empty { display: none; }
-  @media (min-width: 1560px) {
-    .damage-panel { position: fixed; top: 90px; right: max(16px, calc((100vw - 1320px) / 2 - 276px)); max-height: 78vh; overflow-y: auto; z-index: 5; }
   }
   .damage-panel .dp-title { font-family: var(--font-display); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 10px; }
   .damage-panel .dp-weapon-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
@@ -424,7 +427,7 @@
         <div class="stat-chips" id="statChips"></div>
         <div class="stat-details" id="statDetails"></div>
       </div>
-      <div class="damage-panel" id="damagePanel"></div>
+      <div class="damage-panel-stack" id="damagePanel"></div>
       <div class="quality-strip" id="qualityStrip"></div>
       <div class="quality-strip" id="attributeStrip"></div>
       <div class="loadout-settings">
@@ -1265,10 +1268,10 @@
     const effects = findActiveConditionalEffects(slot).filter((e) => effectAppliesToBuckets(e, PLAGUE_BUCKETS));
     const projected = computeProjectedDamage(p, effects, state.damageToggles, PLAGUE_BUCKETS);
     const html =
-      '<div class="dp-title" style="margin-top:18px">Plague of the Outcasts</div>' +
+      '<div class="damage-panel"><div class="dp-title">Plague of the Outcasts</div>' +
       '<div class="dp-base"><span class="dp-base-label">Weapon Base Damage</span><span class="dp-base-value">' + fmt(p.baseDamage) + '</span></div>' +
       (effects.length ? '<div class="dp-group-label">Conditional Bonuses</div>' + renderConditionalBonusRows(effects) : '<div class="dp-empty">No applicable bonuses equipped.</div>') +
-      '<div class="dp-result"><span class="dp-result-label">Projected Tick Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div>';
+      '<div class="dp-result"><span class="dp-result-label">Projected Tick Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div></div>';
     return { html, effects };
   }
   // Vile's Toxic Delivery: a DoT that scales off Explosive Damage (aka Concussion Grenade
@@ -1283,13 +1286,13 @@
     const statusPct = stats.Utility["Status Effects"] || 0;
     const projected = Math.round(TOXIC_DELIVERY_BASE_GRENADE_DAMAGE * (1 + explosivePct / 100) * (1 + statusPct / 100));
     const html =
-      '<div class="dp-title" style="margin-top:18px">Toxic Delivery</div>' +
+      '<div class="damage-panel"><div class="dp-title">Toxic Delivery</div>' +
       '<div class="dp-base"><span class="dp-base-label">Base Grenade Damage*</span><span class="dp-base-value">' + fmt(TOXIC_DELIVERY_BASE_GRENADE_DAMAGE) + '</span></div>' +
       '<div class="dp-group-label">Conditional Bonuses</div>' +
       '<div class="dp-row"><span class="dp-row-label">Explosive Damage</span><span class="dp-row-amount">+' + Math.round(explosivePct) + '%</span></div>' +
       '<div class="dp-row"><span class="dp-row-label">Status Effects</span><span class="dp-row-amount">+' + Math.round(statusPct) + '%</span></div>' +
       '<div class="dp-result"><span class="dp-result-label">Projected Ticking Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div>' +
-      '<div class="dp-empty">*placeholder value, pending a verified base grenade damage</div>';
+      '<div class="dp-empty">*placeholder value, pending a verified base grenade damage</div></div>';
     return { html };
   }
   function renderDamagePanel() {
@@ -1343,7 +1346,7 @@
         : "");
     }
     el.innerHTML =
-      '<div class="dp-title">Damage Projection</div>' +
+      '<div class="damage-panel"><div class="dp-title">Damage Projection</div>' +
       weaponTabsHtml +
       '<div class="dp-base"><span class="dp-base-label">Weapon Damage</span><span class="dp-base-value">' + fmt(p.totalDamage) + '</span></div>' +
       '<div class="dp-group-label">Hit Type</div>' +
@@ -1355,7 +1358,7 @@
       pelletGroupHtml +
       tippingScalesHtml +
       (effects.length ? '<div class="dp-group-label">Conditional Bonuses</div>' + renderConditionalBonusRows(effects) : "") +
-      '<div class="dp-result"><span class="dp-result-label">Projected Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div>' +
+      '<div class="dp-result"><span class="dp-result-label">Projected Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div></div>' +
       (plaguePanel ? plaguePanel.html : "") +
       (toxicPanel ? toxicPanel.html : "");
     el.querySelectorAll("[data-dp-slot]").forEach((btn) => btn.addEventListener("click", () => {
