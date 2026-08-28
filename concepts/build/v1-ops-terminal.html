@@ -1224,7 +1224,6 @@
     ).join("") + '</div>';
     const effects = findActiveConditionalEffects(state.damageToggles.weaponSlot);
     const projected = computeProjectedDamage(p, effects);
-    const hitTypeOnCount = ["crit", "headshot"].filter((k) => state.damageToggles[k]).length;
     function toggleSwitch(attr, checked) {
       return '<label class="toggle dp-toggle"><input type="checkbox" ' + attr + (checked ? " checked" : "") + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>';
     }
@@ -1266,7 +1265,6 @@
       '<div class="dp-group-label">Hit Type</div>' +
       '<div class="dp-row"><span class="dp-row-label">Critical Hit <span class="dp-row-amount">+' + Math.round(p.chd) + '%</span></span>' + toggleSwitch('id="dpCrit"', state.damageToggles.crit) + '</div>' +
       '<div class="dp-row"><span class="dp-row-label">Headshot <span class="dp-row-amount">+' + Math.round(p.hsd) + '%</span></span>' + toggleSwitch('id="dpHeadshot"', state.damageToggles.headshot) + '</div>' +
-      (hitTypeOnCount > 1 ? '<div class="dp-empty">Critical and Headshot stack in the same bucket.</div>' : "") +
       '<div class="dp-group-label">Target Damage</div>' +
       '<div class="dp-row"><span class="dp-row-label">Damage to Armor <span class="dp-row-amount">+' + Math.round(p.dta) + '%</span></span>' + toggleSwitch('id="dpDta"', state.damageToggles.dta) + '</div>' +
       '<div class="dp-row"><span class="dp-row-label">Damage to TOC <span class="dp-row-amount">+' + Math.round(p.dtooc) + '%</span></span>' + toggleSwitch('id="dpDtooc"', state.damageToggles.dtooc) + '</div>' +
@@ -1432,14 +1430,23 @@
     // in the Offensive column specifically, split damage-dealing stats (red) from
     // handling/utility-ish ones that just happen to be typed "Offensive" (yellow)
     const isDamageStat = (name) => /Damage|Critical Hit/i.test(name);
+    // Critical Hit Chance's stats bag entry only holds gear/brand/SHD/spec contributions - the
+    // equipped weapon's own core2/attribute1 roll is folded in separately (via explainStat in
+    // weaponStatsFor) to produce p.chc, so this column needs that weapon-inclusive total
+    // instead of the raw bag value, same as the Gear Attributes strip and the weapon's own
+    // depth column already do.
+    const primaryWeapon = result.weaponStats.Primary;
     ["Offensive", "Defensive", "Utility"].forEach((cat) => {
       const entries = Object.entries(result.stats[cat]);
       cols.push({
         title: cat + " Stats",
-        rows: entries.length ? entries.map(([k, v]) => [
-          k, (v > 0 ? "+" : "") + (Math.round(v * 10) / 10) + (Number.isInteger(v) && Math.abs(v) > 1000 ? "" : ""),
-          cat === "Offensive" ? (isDamageStat(k) ? "var(--red)" : "var(--yellow)") : null,
-        ]) : [["Nothing equipped yet", "—"]],
+        rows: entries.length ? entries.map(([k, v]) => {
+          const val = (cat === "Offensive" && k === "Critical Hit Chance" && primaryWeapon) ? primaryWeapon.chc : v;
+          return [
+            k, (val > 0 ? "+" : "") + (Math.round(val * 10) / 10) + (Number.isInteger(val) && Math.abs(val) > 1000 ? "" : ""),
+            cat === "Offensive" ? (isDamageStat(k) ? "var(--red)" : "var(--yellow)") : null,
+          ];
+        }) : [["Nothing equipped yet", "—"]],
       });
     });
     cols.push(weaponCol(WEAPON_SLOTS[1]), weaponCol(WEAPON_SLOTS[2]));
@@ -2015,10 +2022,22 @@
     });
     DATA.skills.forEach((raw) => items.push({ kind: "skill", raw }));
     DATA.specialization.forEach((raw) => items.push({ kind: "specialization", raw }));
-    DATA.weaponTalents.forEach((raw) => items.push({ kind: "weaponTalent", raw }));
-    DATA.gearTalents.forEach((raw) => items.push({ kind: "gearTalent", raw }));
+    // Exotic talents are 1:1 with their one unique item - listing the talent alongside the
+    // item it's stuck to is pure duplication, so only list the item for those. Shared A/N-tier
+    // talents still get their own row, since "which items can roll this" is useful there.
+    DATA.weaponTalents.forEach((raw) => { if (raw.Quality !== "E") items.push({ kind: "weaponTalent", raw }); });
+    DATA.gearTalents.forEach((raw) => { if (raw.Quality !== "E") items.push({ kind: "gearTalent", raw }); });
+    const combinedQuality = (item) => (item.kind === "skill" || item.kind === "specialization") ? null : item.raw.Quality;
+    const combinedName = (item) => {
+      if (item.kind === "weapon" || item.kind === "weaponTalent") return item.raw.Name;
+      if (item.kind === "gear") return item.raw["Item Name"];
+      if (item.kind === "gearTalent") return item.raw.Talent;
+      if (item.kind === "specialization") return item.raw.name;
+      return item.raw["Item Name"] || "";
+    };
+    const sortedItems = sortByQuality(items, combinedQuality, combinedName);
     const categories = [...WEAPON_TYPES, ...GEAR_SLOTS.map((s) => s.key)];
-    openPicker("Search Everything", items, combinedResolve, combinedRowHtml, (picked) => {
+    openPicker("Search Everything", sortedItems, combinedResolve, combinedRowHtml, (picked) => {
       if (picked.__kind === "weapon") {
         equipWeaponSmart(picked);
       } else if (picked.__kind === "gear") {
