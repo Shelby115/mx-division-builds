@@ -1145,8 +1145,13 @@
   // toggles defaults to the real current state, but a caller can pass an override (e.g. the
   // pellet split below forces crit on/off independently of the actual Critical Hit toggle,
   // since each pellet rolls its own crit rather than the whole shot doing so)
-  function computeProjectedDamage(p, effects, toggles) {
+  // allowedBuckets restricts which contribution buckets count toward the result - omitted
+  // (undefined) means every bucket counts, same as before this existed. Used by the secondary
+  // projections below (e.g. Plague of the Outcasts' ticks can't crit/headshot and mostly
+  // ignore Amplify, but still benefit from Weapon Damage/Total Weapon Damage/DTA/DTOOC).
+  function computeProjectedDamage(p, effects, toggles, allowedBuckets) {
     toggles = toggles || state.damageToggles;
+    const bucketOk = (b) => !allowedBuckets || allowedBuckets.has(b);
     let weaponDamagePct = p.totalPct;
     // Critical Hit Damage and Headshot Damage share one bucket (additive, then multiplies
     // onto the base weapon-damage number). Damage to Armor and Damage to TOC each get their
@@ -1165,10 +1170,10 @@
     // toggle rather than getting its own bucket.
     const ts = tippingScalesActive();
     const stackCHD = ts ? Math.min(toggles.tippingScalesStacks || 0, ts.maxStacks) * ts.perStackCHD : 0;
-    if (toggles.crit) conditionalDamagePct += p.chd + stackCHD;
-    if (toggles.headshot) conditionalDamagePct += p.hsd;
-    if (toggles.dta) dtaPct += p.dta;
-    if (toggles.dtooc) dtoocPct += p.dtooc;
+    if (bucketOk("critDamage") && toggles.crit) conditionalDamagePct += p.chd + stackCHD;
+    if (bucketOk("hsd") && toggles.headshot) conditionalDamagePct += p.hsd;
+    if (bucketOk("dta") && toggles.dta) dtaPct += p.dta;
+    if (bucketOk("dtooc") && toggles.dtooc) dtoocPct += p.dtooc;
     // Registry effects can either be a flat on/off toggle ({bucket, amount}) or a stack-count
     // input ({bucket, stacks: {max, perStack, base}}); base is a one-time addition applied
     // once any stacks are held, for talents whose first stack isn't just 1x perStack (e.g.
@@ -1176,6 +1181,7 @@
     // second bucket at its own rate (e.g. Full Stop's stacks grant both Weapon Damage and
     // Headshot Damage per stack).
     function applyToBucket(bucket, amt) {
+      if (!bucketOk(bucket)) return;
       if (bucket === "weaponDamage") weaponDamagePct += amt;
       else if (bucket === "totalWeaponDamage") totalWeaponDamagePct += amt;
       else if (bucket === "amplify") amplifyMultiplier *= (1 + amt / 100);
@@ -1212,6 +1218,80 @@
   }
   const DAMAGE_PANEL_SLOTS = ["Primary", "Secondary", "SideArm"];
   const DAMAGE_PANEL_SLOT_LABELS = { Primary: "Primary", Secondary: "Secondary", SideArm: "Sidearm" };
+  function toggleSwitch(attr, checked) {
+    return '<label class="toggle dp-toggle"><input type="checkbox" ' + attr + (checked ? " checked" : "") + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>';
+  }
+  // shared by the main panel and every secondary projection below - renders each effect as a
+  // stack input, a set of mutually-exclusive choice buttons, or a plain toggle.
+  function renderConditionalBonusRows(effectsList) {
+    return effectsList.map((eff) => {
+      const itemTag = '<br><span style="color:' + (QUALITY_TEXT_COLOR[eff.itemQuality] || "var(--muted)") + ';font-size:10.5px">' + eff.itemName + '</span>';
+      if (eff.stacks) {
+        const n = Math.min(state.damageToggles[eff.id] || 0, eff.stacks.max);
+        return '<div class="dp-row"><span class="dp-row-label">' + eff.label + itemTag + '</span>' +
+          '<input type="number" class="dp-pellet-input" min="0" max="' + eff.stacks.max + '" placeholder="—" data-dp-stack-effect="' + eff.id + '" value="' + (n || "") + '"></div>';
+      }
+      if (eff.choices) {
+        const chosen = state.damageToggles[eff.id];
+        return '<div class="dp-row dp-choice-row"><span class="dp-row-label">' + eff.label + itemTag + '</span></div>' +
+          '<div class="dp-choice-btns">' + eff.choices.map((c) =>
+            '<button class="dp-choice-btn' + (chosen === c.key ? " active" : "") + '" data-dp-choice-effect="' + eff.id + '" data-dp-choice-key="' + c.key + '">' + c.label + ' <span class="dp-row-amount">' + (c.amount >= 0 ? "+" : "") + c.amount + '%</span></button>'
+          ).join("") + '</div>';
+      }
+      return '<div class="dp-row"><span class="dp-row-label">' + eff.label + ' <span class="dp-row-amount">' + (eff.amount >= 0 ? "+" : "") + eff.amount + '%</span>' + itemTag + '</span>' + toggleSwitch('data-dp-effect="' + eff.id + '"', state.damageToggles[eff.id]) + '</div>';
+    }).join("");
+  }
+  // true if toggling this effect would change the result under this bucket allow-list -
+  // an effect can feed more than one bucket (stacksSecondary/secondary), so any one match counts.
+  function effectAppliesToBuckets(eff, allowedBuckets) {
+    if (allowedBuckets.has(eff.bucket)) return true;
+    if (eff.stacksSecondary && allowedBuckets.has(eff.stacksSecondary.bucket)) return true;
+    if (eff.secondary && allowedBuckets.has(eff.secondary.bucket)) return true;
+    return false;
+  }
+  function findWeaponSlotByName(name) {
+    return DAMAGE_PANEL_SLOTS.find((slot) => state.weapons[slot] && state.weapons[slot].name === name) || null;
+  }
+  // Pestilence's Plague of the Outcasts: a DoT tick that rides the same Weapon Damage/Total
+  // Weapon Damage/DTA/DTOOC bonuses as the gun's own hits (confirmed against the registry -
+  // e.g. Sawyer's Kneepads' "Stand Your Ground" lives in totalWeaponDamage, so it counts here),
+  // but the tick can never crit or headshot, and most Amplify bonuses (e.g. Striker's) affect
+  // the bullet itself, not the DoT - so those two buckets are excluded.
+  const PLAGUE_BUCKETS = new Set(["weaponDamage", "totalWeaponDamage", "dta", "dtooc"]);
+  function buildPlagueOfOutcastsPanel(weaponStats) {
+    const slot = findWeaponSlotByName("Pestilence");
+    const p = slot && weaponStats[slot];
+    if (!p) return null;
+    const effects = findActiveConditionalEffects(slot).filter((e) => effectAppliesToBuckets(e, PLAGUE_BUCKETS));
+    const projected = computeProjectedDamage(p, effects, state.damageToggles, PLAGUE_BUCKETS);
+    const html =
+      '<div class="dp-title" style="margin-top:18px">Plague of the Outcasts</div>' +
+      '<div class="dp-base"><span class="dp-base-label">Weapon Base Damage</span><span class="dp-base-value">' + fmt(p.baseDamage) + '</span></div>' +
+      (effects.length ? '<div class="dp-group-label">Conditional Bonuses</div>' + renderConditionalBonusRows(effects) : '<div class="dp-empty">No applicable bonuses equipped.</div>') +
+      '<div class="dp-result"><span class="dp-result-label">Projected Tick Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div>';
+    return { html, effects };
+  }
+  // Vile's Toxic Delivery: a DoT that scales off Explosive Damage (aka Concussion Grenade
+  // damage) and the Status Effects attribute - two independent buckets, additive within
+  // themselves, multiplicative against each other. Both stats are already summed generically
+  // from gear/brand/specialization into stats.Utility, so no engine.js changes are needed here.
+  const TOXIC_DELIVERY_BASE_GRENADE_DAMAGE = 500000; // placeholder pending a verified base grenade damage value
+  function buildToxicDeliveryPanel(stats) {
+    const vile = state.gear.Mask;
+    if (!vile || !vile.talent || vile.talent.Talent !== "Toxic Delivery") return null;
+    const explosivePct = stats.Utility["Explosive Damage"] || 0;
+    const statusPct = stats.Utility["Status Effects"] || 0;
+    const projected = Math.round(TOXIC_DELIVERY_BASE_GRENADE_DAMAGE * (1 + explosivePct / 100) * (1 + statusPct / 100));
+    const html =
+      '<div class="dp-title" style="margin-top:18px">Toxic Delivery</div>' +
+      '<div class="dp-base"><span class="dp-base-label">Base Grenade Damage*</span><span class="dp-base-value">' + fmt(TOXIC_DELIVERY_BASE_GRENADE_DAMAGE) + '</span></div>' +
+      '<div class="dp-group-label">Conditional Bonuses</div>' +
+      '<div class="dp-row"><span class="dp-row-label">Explosive Damage</span><span class="dp-row-amount">+' + Math.round(explosivePct) + '%</span></div>' +
+      '<div class="dp-row"><span class="dp-row-label">Status Effects</span><span class="dp-row-amount">+' + Math.round(statusPct) + '%</span></div>' +
+      '<div class="dp-result"><span class="dp-result-label">Projected Ticking Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div>' +
+      '<div class="dp-empty">*placeholder value, pending a verified base grenade damage</div>';
+    return { html };
+  }
   function renderDamagePanel() {
     const el = document.getElementById("damagePanel");
     const weaponStats = computeCurrent().weaponStats;
@@ -1224,9 +1304,13 @@
     ).join("") + '</div>';
     const effects = findActiveConditionalEffects(state.damageToggles.weaponSlot);
     const projected = computeProjectedDamage(p, effects);
-    function toggleSwitch(attr, checked) {
-      return '<label class="toggle dp-toggle"><input type="checkbox" ' + attr + (checked ? " checked" : "") + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>';
-    }
+    const plaguePanel = buildPlagueOfOutcastsPanel(weaponStats);
+    const toxicPanel = buildToxicDeliveryPanel(computeCurrent().stats);
+    // effects lookup for handling stack-input changes needs to cover ids from every rendered
+    // panel, not just the main one - a weapon-scoped effect on Pestilence (e.g. Plague of the
+    // Outcasts itself, if it ever grows a stack) won't be in `effects` unless Pestilence is the
+    // currently-viewed tab.
+    const lookupEffects = plaguePanel ? effects.concat(plaguePanel.effects.filter((e) => !effects.some((x) => x.id === e.id))) : effects;
     // shotguns: each pellet rolls its own crit independently, so show both the crit and
     // non-crit per-pellet number side by side regardless of whether the Critical Hit toggle
     // above is on - that toggle is about the whole-hit projection, this is a separate split.
@@ -1270,23 +1354,10 @@
       '<div class="dp-row"><span class="dp-row-label">Damage to TOC <span class="dp-row-amount">+' + Math.round(p.dtooc) + '%</span></span>' + toggleSwitch('id="dpDtooc"', state.damageToggles.dtooc) + '</div>' +
       pelletGroupHtml +
       tippingScalesHtml +
-      (effects.length ? '<div class="dp-group-label">Conditional Bonuses</div>' + effects.map((eff) => {
-        const itemTag = '<br><span style="color:' + (QUALITY_TEXT_COLOR[eff.itemQuality] || "var(--muted)") + ';font-size:10.5px">' + eff.itemName + '</span>';
-        if (eff.stacks) {
-          const n = Math.min(state.damageToggles[eff.id] || 0, eff.stacks.max);
-          return '<div class="dp-row"><span class="dp-row-label">' + eff.label + itemTag + '</span>' +
-            '<input type="number" class="dp-pellet-input" min="0" max="' + eff.stacks.max + '" placeholder="—" data-dp-stack-effect="' + eff.id + '" value="' + (n || "") + '"></div>';
-        }
-        if (eff.choices) {
-          const chosen = state.damageToggles[eff.id];
-          return '<div class="dp-row dp-choice-row"><span class="dp-row-label">' + eff.label + itemTag + '</span></div>' +
-            '<div class="dp-choice-btns">' + eff.choices.map((c) =>
-              '<button class="dp-choice-btn' + (chosen === c.key ? " active" : "") + '" data-dp-choice-effect="' + eff.id + '" data-dp-choice-key="' + c.key + '">' + c.label + ' <span class="dp-row-amount">' + (c.amount >= 0 ? "+" : "") + c.amount + '%</span></button>'
-            ).join("") + '</div>';
-        }
-        return '<div class="dp-row"><span class="dp-row-label">' + eff.label + ' <span class="dp-row-amount">' + (eff.amount >= 0 ? "+" : "") + eff.amount + '%</span>' + itemTag + '</span>' + toggleSwitch('data-dp-effect="' + eff.id + '"', state.damageToggles[eff.id]) + '</div>';
-      }).join("") : "") +
-      '<div class="dp-result"><span class="dp-result-label">Projected Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div>';
+      (effects.length ? '<div class="dp-group-label">Conditional Bonuses</div>' + renderConditionalBonusRows(effects) : "") +
+      '<div class="dp-result"><span class="dp-result-label">Projected Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div>' +
+      (plaguePanel ? plaguePanel.html : "") +
+      (toxicPanel ? toxicPanel.html : "");
     el.querySelectorAll("[data-dp-slot]").forEach((btn) => btn.addEventListener("click", () => {
       if (btn.disabled) return;
       state.damageToggles.weaponSlot = btn.dataset.dpSlot;
@@ -1309,7 +1380,7 @@
       renderDamagePanel();
     }));
     el.querySelectorAll("[data-dp-stack-effect]").forEach((inp) => inp.addEventListener("change", (e) => {
-      const eff = effects.find((x) => x.id === inp.dataset.dpStackEffect);
+      const eff = lookupEffects.find((x) => x.id === inp.dataset.dpStackEffect);
       const max = eff && eff.stacks ? eff.stacks.max : 999;
       state.damageToggles[inp.dataset.dpStackEffect] = Math.max(0, Math.min(max, Number(e.target.value) || 0));
       renderDamagePanel();
