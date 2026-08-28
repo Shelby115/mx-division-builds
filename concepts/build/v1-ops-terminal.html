@@ -975,7 +975,9 @@
     "Stand Your Ground": [{ id: "stand-your-ground", label: "Stacks (1/s not moving, max 10)", bucket: "totalWeaponDamage", stacks: { max: 10, perStack: 3 } }],
     "Quick Draw": [{ id: "quick-draw", label: "Stacks (1 per 0.3s holstered, max 100, pistol only)", bucket: "weaponDamage", stacks: { max: 100, perStack: 10 } }],
     "Vicious Cycle": [{ id: "vicious-cycle", label: "Stacks (1 per hit taken, max 30)", bucket: "weaponDamage", stacks: { max: 30, perStack: 1.5 } }],
-    "Chemical Agent": [{ id: "chemical-agent", label: "Stacks (status dealt/received, max 12)", bucket: "weaponDamage", stacks: { max: 12, perStack: 2 } }],
+    "Chemical Agent": [{ id: "chemical-agent", label: "Stacks (status dealt/received, max 12)", bucket: "weaponDamage", stacks: { max: 12, perStack: 2 }, stacksSecondary: { bucket: "statusEffects", perStack: 2 } }],
+    "Perpetuation": [{ id: "perpetuation", label: "Just landed a headshot (next status effect)", bucket: "statusEffects", amount: 50 }],
+    "Perfect Perpetuation": [{ id: "perfect-perpetuation", label: "Just landed a headshot (next status effect)", bucket: "statusEffects", amount: 50 }],
     "Cover Shooter": [{ id: "cover-shooter", label: "Stacks (1 per bullet fired in cover, max 100)", bucket: "weaponDamage", stacks: { max: 100, perStack: 1 } }],
     "Gangland Hit": [{ id: "gangland-hit", label: "Marks on target (1 = 20%, +5% per extra, max 4)", bucket: "amplify", stacks: { max: 4, perStack: 5, base: 15 } }],
     "Full Stop": [{ id: "full-stop", label: "Stacks (shooting builds, headshots grant 2, max 20)", bucket: "weaponDamage", stacks: { max: 20, perStack: 2 }, stacksSecondary: { bucket: "hsd", perStack: 5 } }],
@@ -1157,6 +1159,33 @@
     found.push(...computeGearsetEffects());
     return found;
   }
+  // Shared by every projection panel's compute step: walks the effects array and calls
+  // applyToBucket(bucket, amount) for each contribution, resolving the three effect shapes a
+  // registry entry can take. Registry effects can either be a flat on/off toggle
+  // ({bucket, amount}), a stack-count input ({bucket, stacks: {max, perStack, base}}; base is a
+  // one-time addition applied once any stacks are held, for talents whose first stack isn't
+  // just 1x perStack), or mutually-exclusive choices ({choices: [{key, label, amount}]}).
+  // stacksSecondary/secondary let one stack count or one toggle feed a SECOND bucket at its own
+  // rate (e.g. Chemical Agent's stacks grant both Weapon Damage and Status Effects).
+  function applyEffectsToBuckets(effects, toggles, applyToBucket) {
+    effects.forEach((eff) => {
+      if (eff.stacks) {
+        const n = Math.min(Number(toggles[eff.id]) || 0, eff.stacks.max);
+        if (n <= 0) return;
+        applyToBucket(eff.bucket, n * eff.stacks.perStack + (eff.stacks.base || 0));
+        if (eff.stacksSecondary) applyToBucket(eff.stacksSecondary.bucket, n * eff.stacksSecondary.perStack);
+        return;
+      }
+      if (eff.choices) {
+        const chosen = eff.choices.find((c) => c.key === toggles[eff.id]);
+        if (chosen) applyToBucket(eff.bucket, chosen.amount);
+        return;
+      }
+      if (!toggles[eff.id]) return;
+      applyToBucket(eff.bucket, eff.amount);
+      if (eff.secondary) applyToBucket(eff.secondary.bucket, eff.secondary.amount);
+    });
+  }
   // toggles defaults to the real current state, but a caller can pass an override (e.g. the
   // pellet split below forces crit on/off independently of the actual Critical Hit toggle,
   // since each pellet rolls its own crit rather than the whole shot doing so)
@@ -1189,12 +1218,6 @@
     if (bucketOk("hsd") && toggles.headshot) conditionalDamagePct += p.hsd;
     if (bucketOk("dta") && toggles.dta) dtaPct += p.dta;
     if (bucketOk("dtooc") && toggles.dtooc) dtoocPct += p.dtooc;
-    // Registry effects can either be a flat on/off toggle ({bucket, amount}) or a stack-count
-    // input ({bucket, stacks: {max, perStack, base}}); base is a one-time addition applied
-    // once any stacks are held, for talents whose first stack isn't just 1x perStack (e.g.
-    // Gangland Hit's first mark is +20%, not +5%). stacksSecondary lets one stack count feed a
-    // second bucket at its own rate (e.g. Full Stop's stacks grant both Weapon Damage and
-    // Headshot Damage per stack).
     function applyToBucket(bucket, amt) {
       if (!bucketOk(bucket)) return;
       if (bucket === "weaponDamage") weaponDamagePct += amt;
@@ -1205,28 +1228,7 @@
       else if (bucket === "dta") { if (toggles.dta) dtaPct += amt; }
       else if (bucket === "dtooc") { if (toggles.dtooc) dtoocPct += amt; }
     }
-    effects.forEach((eff) => {
-      if (eff.stacks) {
-        const n = Math.min(Number(toggles[eff.id]) || 0, eff.stacks.max);
-        if (n <= 0) return;
-        applyToBucket(eff.bucket, n * eff.stacks.perStack + (eff.stacks.base || 0));
-        if (eff.stacksSecondary) applyToBucket(eff.stacksSecondary.bucket, n * eff.stacksSecondary.perStack);
-        return;
-      }
-      // choices: mutually-exclusive states (e.g. Bond's "ally nearby" vs "skill nearby") -
-      // toggles[eff.id] holds the chosen option's key, or is falsy for "none selected".
-      if (eff.choices) {
-        const chosen = eff.choices.find((c) => c.key === toggles[eff.id]);
-        if (chosen) applyToBucket(eff.bucket, chosen.amount);
-        return;
-      }
-      if (!toggles[eff.id]) return;
-      applyToBucket(eff.bucket, eff.amount);
-      // secondary: a plain toggle that also grants a flat amount in a second bucket (e.g.
-      // Chameleon's Adaptive Instincts granting both Critical Hit Damage and Weapon Damage
-      // from the same on/off switch).
-      if (eff.secondary) applyToBucket(eff.secondary.bucket, eff.secondary.amount);
-    });
+    applyEffectsToBuckets(effects, toggles, applyToBucket);
     const dtaMultiplier = 1 + dtaPct / 100;
     const dtoocMultiplier = 1 + dtoocPct / 100;
     return Math.round(p.baseDamage * (1 + weaponDamagePct / 100) * (1 + conditionalDamagePct / 100) * dtaMultiplier * dtoocMultiplier * (1 + totalWeaponDamagePct / 100) * amplifyMultiplier);
@@ -1414,22 +1416,48 @@
   // from gear/brand/specialization into stats.Utility, so no engine.js changes are needed here.
   // Doesn't depend on a weapon being equipped at all, since it's off the Vile mask's own talent.
   const TOXIC_DELIVERY_BASE_GRENADE_DAMAGE = 500000; // placeholder pending a verified base grenade damage value
+  // Explosive Damage and Status Effects are each their own additive bucket here too (conditional
+  // talents like Chemical Agent's stacks or Perpetuation's post-headshot buff add into one of
+  // them), multiplying against the flat gear/brand/spec totals already summed into stats.Utility.
+  const TOXIC_BUCKETS = new Set(["explosiveDamage", "statusEffects"]);
   function renderToxicPanel() {
     const container = document.getElementById("dp-panel-toxic");
+    const toggles = state.damageToggles.panels.toxic;
     const vile = state.gear.Mask;
     if (!vile || !vile.talent || vile.talent.Talent !== "Toxic Delivery") { container.innerHTML = ""; return; }
     const stats = computeCurrent().stats;
-    const explosivePct = stats.Utility["Explosive Damage"] || 0;
-    const statusPct = stats.Utility["Status Effects"] || 0;
+    const baseExplosivePct = stats.Utility["Explosive Damage"] || 0;
+    const baseStatusPct = stats.Utility["Status Effects"] || 0;
+    // Toxic Delivery isn't tied to one weapon slot the way the main panel or Plague are, so a
+    // weapon-scoped talent like Perpetuation has to be looked up across every equipped weapon,
+    // not just whichever one happens to be "viewed" - dedup by id since gear/gearset effects
+    // come back identical on every pass.
+    const seenIds = new Set();
+    const effects = [];
+    DAMAGE_PANEL_SLOTS.forEach((slot) => {
+      findActiveConditionalEffects(slot).forEach((e) => {
+        if (seenIds.has(e.id)) return;
+        seenIds.add(e.id);
+        effects.push(e);
+      });
+    });
+    const relevantEffects = effects.filter((e) => effectAppliesToBuckets(e, TOXIC_BUCKETS));
+    let explosivePct = baseExplosivePct, statusPct = baseStatusPct;
+    applyEffectsToBuckets(relevantEffects, toggles, (bucket, amt) => {
+      if (bucket === "explosiveDamage") explosivePct += amt;
+      else if (bucket === "statusEffects") statusPct += amt;
+    });
     const projected = Math.round(TOXIC_DELIVERY_BASE_GRENADE_DAMAGE * (1 + explosivePct / 100) * (1 + statusPct / 100));
     container.innerHTML =
       '<div class="dp-title">Toxic Delivery</div>' +
       '<div class="dp-base"><span class="dp-base-label">Base Grenade Damage*</span><span class="dp-base-value">' + fmt(TOXIC_DELIVERY_BASE_GRENADE_DAMAGE) + '</span></div>' +
-      '<div class="dp-group-label">Conditional Bonuses</div>' +
+      '<div class="dp-group-label">Attributes</div>' +
       '<div class="dp-row"><span class="dp-row-label">Explosive Damage</span><span class="dp-row-amount">+' + Math.round(explosivePct) + '%</span></div>' +
       '<div class="dp-row"><span class="dp-row-label">Status Effects</span><span class="dp-row-amount">+' + Math.round(statusPct) + '%</span></div>' +
+      (relevantEffects.length ? '<div class="dp-group-label">Conditional Bonuses</div>' + renderConditionalBonusRows(relevantEffects, toggles) : "") +
       '<div class="dp-result"><span class="dp-result-label">Projected Ticking Damage</span><span class="dp-result-value">' + fmt(projected) + '</span></div>' +
       '<div class="dp-empty">*placeholder value, pending a verified base grenade damage</div>';
+    wireConditionalBonusListeners(container, toggles, relevantEffects, renderToxicPanel);
   }
   // Umbrella entry point called by the render pipeline - each panel below owns its own
   // container, its own local toggle state, and its own listeners, so re-rendering "the damage

@@ -361,6 +361,13 @@ window.Engine = (function () {
 				if (redCores > 0) add(stats.Offensive, "Weapon Damage", redCores * 5, "Kill Confirmed (Memento)");
 			}
 
+			// One in Hand... (Acosta's Go-Bag, Backpack exotic): "Two in the Bag" is a fixed,
+			// unconditional passive list on the talent text - the grenade-refund half of the
+			// talent is situational and isn't modeled. +10% Status Effects always active.
+			if (loadout.gear && loadout.gear.Backpack && loadout.gear.Backpack.name === "Acosta's Go-Bag") {
+				add(stats.Utility, "Status Effects", 10, "Two in the Bag (Acosta's Go-Bag)");
+			}
+
 			// shared expertise level (0-30) is the default for every weapon's own expertise -
 			// each weapon slot can override it (loadout.weaponExpertise, keyed by slot), same
 			// pattern as gear's per-piece expertise. It adds straight into weapon damage %, same
